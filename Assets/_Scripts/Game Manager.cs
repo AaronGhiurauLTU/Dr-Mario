@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using UnityEditor.Experimental.GraphView;
 using UnityEngine;
 
 public class GameManager : MonoBehaviour
@@ -14,13 +15,20 @@ public class GameManager : MonoBehaviour
 	// the amount of viruses that initially generate
 	public int virusCount;
 	
-	public GameObject virusPrefab;
+	public GameObject virusPrefab,
+		pillPrefab,
+		blockFolder;
+
+	// in seconds, the amount of time between updating falling objects
+	public float gravityInterval;
 
 	// stores information about the position and color while providing methods to check for matching adjacent blocks
 	public class Block
 	{
-		// simply is the same as the gameBoard array that stores the blocks at each position in this 2D array, shared across all instances of this class
-		public static Block[,] blocks;
+		// stores the blocks at each position in this 2D array, shared across all instances of this class
+		public static Block[,] gameBoard;
+
+		public static List<Block> fallingBlocks;
 
 		// the possible colors a block can be
 		public enum Color
@@ -90,7 +98,7 @@ public class GameManager : MonoBehaviour
 			// loop until the edge of the game board is reached
 			while (currentX >= 0 && currentX < 8 && currentY >= 0 && currentY < 16)
 			{
-				Block checkingBlock = blocks[currentX, currentY];
+				Block checkingBlock = gameBoard[currentX, currentY];
 
 				// if a block is there and it has the same color as the root, add this part to the return list
 				if (checkingBlock != null && checkingBlock.GetColor == color)
@@ -135,6 +143,27 @@ public class GameManager : MonoBehaviour
 
 			this.color = color;
 		}
+		// overridable for pill, falls until it reaches the bottom or a block is directly below it
+		public virtual void Fall()
+		{
+			// check if it has room to fall down
+			if (y > 0 && gameBoard[x, y - 1] == null)
+			{
+				// lower block by one
+				gameBoard[x, y ] = null;
+				
+				y--;
+				
+				gameBoard[x, y] = this;
+
+				part.transform.position += Vector3.down;
+			}
+			else
+			{
+				// remove from list since it is resting on something
+				fallingBlocks.Remove(this);
+			}
+		}
 		// constructor
 		public Block(GameObject part, Color color, int x, int y, GameManager gameManager)
 		{
@@ -142,6 +171,9 @@ public class GameManager : MonoBehaviour
 			this.gameManager = gameManager;
 			this.x = x;
 			this.y = y;
+			
+			gameBoard[x, y] = this;
+
 			meshRenderer = part.GetComponent<MeshRenderer>();
 			SetColor(color);
 		}
@@ -163,20 +195,61 @@ public class GameManager : MonoBehaviour
 			SetColor(color);
 		}
 	}
-	// this 2D array stores the block (or derived class) at each position, if nothing is there it is null
-	private Block[,] gameBoard;
+	// class for half a pill, contains overridden fall method for checking both halves at once and has a variable for the other half's instance
+	public class PillHalf : Block
+	{
+		// the instance of the other half of the pill
+		public PillHalf otherHalf;
+
+
+		public override void Fall()
+		{
+			int otherX = otherHalf.x;
+			int otherY = otherHalf.y;
+
+			// ensure both instances of y are above 0 (above bottom of pill bottom) and that there is no part directly below
+			if (y > 0 && gameBoard[x, y - 1] == null && otherY > 0 && (gameBoard[otherX, otherY - 1] == null || gameBoard[otherX, otherY - 1] == this))
+			{
+				// lower both halves
+				gameBoard[x, y] = null;
+				gameBoard[otherX, otherY] = null;
+
+				y--;
+				otherY--;
+				otherHalf.y = otherY;
+
+				gameBoard[x, y] = this;
+				gameBoard[otherX, otherY] = otherHalf;
+
+				// only need to lower the part once since it is the whole pill
+				part.transform.position += Vector3.down;
+			}
+			else
+			{
+				// remove this part from the list since it reached the bottom or another part
+				fallingBlocks.Remove(this);
+			}
+		}
+		// the part is the whole pill while the renderer is just of one half
+		public PillHalf(GameObject part, Color color, int x, int y, bool leftSide, GameManager gameManager) 
+			: base(part, color, x, y, gameManager)
+		{
+			meshRenderer = part.transform.Find("Pill" + (leftSide ? "Left" : "Right")).GetComponent<MeshRenderer>();
+			SetColor(color);
+		}
+	}
+	private float timeElapsedSinceUpdate = 0.0f;
 
 	// insert a virus at the specified position and possibly the specified color
 	private void InsertVirus(int x, int y, Block.Color color)
 	{
-		GameObject virusObject = Instantiate(virusPrefab);
+		GameObject virusObject = Instantiate(virusPrefab, blockFolder.transform);
 
 		// the positions were set so the world position is the index in gameBoard
 		virusObject.transform.position = new Vector3(x, y, 0);
 
 		// the new instance of the virus
 		Virus virus = new(virusObject, color, x, y, this);
-		gameBoard[x, y] = virus;
 
 		// get the matching horizontal and vertical blocks
 		virus.SameColorInARow(out List<Vector2> horizontalMatches, out List<Vector2> verticalMatches);
@@ -205,12 +278,39 @@ public class GameManager : MonoBehaviour
 			possibleColors.RemoveAt(colorIndex);
 		}
 	}
+	// creates a new pill with random colors for each side
+	private void SpawnNewPill()
+	{
+		GameObject newPillObj = Instantiate(pillPrefab, blockFolder.transform);
+
+		// randomly select a color for each half, can be the same color for both
+		List<Block.Color> possibleColors = new() 
+		{ 
+			Block.Color.Red, 
+			Block.Color.Yellow,
+			Block.Color.Blue,
+		};
+		// randomly select a color for the virus
+		int colorIndex = Random.Range(0, possibleColors.Count);
+
+		PillHalf leftHalf = new(newPillObj, possibleColors.ElementAt(colorIndex), 3, 16, true, this);
+
+		colorIndex = Random.Range(0, possibleColors.Count);
+		PillHalf rightHalf = new(newPillObj, possibleColors.ElementAt(colorIndex), 4, 16, false, this);
+
+		leftHalf.otherHalf = rightHalf;
+		rightHalf.otherHalf = leftHalf;
+		
+		// only add left half since the fall function accounts for the other half
+		Block.fallingBlocks.Add(leftHalf);
+	}
 	// Start is called before the first frame update
 	void Start()
 	{
-		// initialize game board, lowest coordinate is (0, 0) and the highest is (7, 15)
-		gameBoard = new Block[8, 16];
-		Block.blocks = gameBoard;
+		// initialize game board, lowest coordinate is (0, 0) and the highest is (7, 16), y has 17 levels for the level that the pill starts at
+		Block.gameBoard = new Block[8, 17];
+
+		Block.fallingBlocks = new();
 
 		// this list contains all available spots for a virus to generate
 		List<Vector2> possibleVirusSpots = new();
@@ -248,11 +348,25 @@ public class GameManager : MonoBehaviour
 			// remove the position from the list of available positions since a virus is now there
 			possibleVirusSpots.RemoveAt(positionIndex);
 		}
+
+		SpawnNewPill();
 	}
 
 	// Update is called once per frame
 	void Update()
 	{
-
+		timeElapsedSinceUpdate += Time.deltaTime;
+		// enough time has elapsed, make the necessary blocks fall
+		if (timeElapsedSinceUpdate >= gravityInterval)
+		{
+			// iterate through list of blocks that need to fall and call their fall function
+			for (int i = 0; i < Block.fallingBlocks.Count; i++)
+			{
+				Block currentBlock = Block.fallingBlocks.ElementAt(i);
+				currentBlock.Fall();
+			}
+			// reset timer
+			timeElapsedSinceUpdate = 0;
+		}
 	}
 }

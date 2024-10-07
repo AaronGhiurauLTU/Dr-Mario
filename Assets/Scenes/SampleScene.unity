@@ -332,6 +332,37 @@ Transform:
   m_Children: []
   m_Father: {fileID: 1084208088}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &285201010
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 285201011}
+  m_Layer: 0
+  m_Name: BlockFolder
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &285201011
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 285201010}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &443388537
 GameObject:
   m_ObjectHideFlags: 0
@@ -656,8 +687,11 @@ MonoBehaviour:
   yellow: {fileID: 2100000, guid: aeeceec2305e837688f8c26e00bf960f, type: 2}
   blue: {fileID: 2100000, guid: ec0aae25f5e57297492d2ff10cc9997a, type: 2}
   grey: {fileID: 2100000, guid: 7ea0df8629116f82eacd06b3d5f9fe8f, type: 2}
-  virusCount: 50
+  virusCount: 25
   virusPrefab: {fileID: 5071642872035543707, guid: 22241b05f21d4d032b9984f65a5973a1, type: 3}
+  pillPrefab: {fileID: 8001982494529617100, guid: 9482fb16b3ee90f50bc3910695c14088, type: 3}
+  blockFolder: {fileID: 285201010}
+  gravityInterval: 1
 --- !u!4 &990973570
 Transform:
   m_ObjectHideFlags: 0
@@ -927,3 +961,4 @@ SceneRoots:
   - {fileID: 705507995}
   - {fileID: 1084208088}
   - {fileID: 990973570}
+  - {fileID: 285201011}
