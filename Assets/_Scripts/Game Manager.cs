@@ -201,7 +201,7 @@ public class GameManager : MonoBehaviour
 		// the instance of the other half of the pill
 		public PillHalf otherHalf;
 
-
+		// overridden from block class, checks the other half of the pill when falling as well
 		public override void Fall()
 		{
 			int otherX = otherHalf.x;
@@ -228,6 +228,33 @@ public class GameManager : MonoBehaviour
 			{
 				// remove this part from the list since it reached the bottom or another part
 				fallingBlocks.Remove(this);
+
+				// disable control of pill
+				part.GetComponent<PillControl>().enabled = false;
+
+				this.SameColorInARow(out List<Vector2> thisHorizontalMatches, out List<Vector2> thisVerticalMatches);
+				otherHalf.SameColorInARow(out List<Vector2> otherHorizontalMatches, out List<Vector2> otherVerticalMatches);
+			}
+		}
+		// ensure when moving in the specified direction (-1 or 1) that there is nothing in the way
+		public void ShiftHorizontally(int direction)
+		{
+			if (x + direction >= 0 && x + direction < 8 && otherHalf.x + direction >= 0 && otherHalf.x + direction < 8 
+				&& (gameBoard[x + direction, y] == null || gameBoard[x + direction, y] == otherHalf)
+				&& (gameBoard[otherHalf.x + direction, otherHalf.y] == null || gameBoard[otherHalf.x + direction, otherHalf.y] == this))
+			{
+				// make the proper blocks null and add the direction to both halve's x value
+				gameBoard[x, y] = null;
+				gameBoard[otherHalf.x, otherHalf.y] = null;
+
+				x += direction;
+				otherHalf.x += direction;
+			
+				gameBoard[x, y] = this;
+				gameBoard[otherHalf.x, otherHalf.y] = otherHalf;
+				
+				// part for pill half is the whole pill so only need to move it once
+				part.transform.position += new Vector3(direction, 0, 0);
 			}
 		}
 		// the part is the whole pill while the renderer is just of one half
@@ -303,6 +330,8 @@ public class GameManager : MonoBehaviour
 		
 		// only add left half since the fall function accounts for the other half
 		Block.fallingBlocks.Add(leftHalf);
+
+		currentPillLeftHalf = leftHalf;
 	}
 	// Start is called before the first frame update
 	void Start()
@@ -352,6 +381,14 @@ public class GameManager : MonoBehaviour
 		SpawnNewPill();
 	}
 
+	// for outside calls, allow moving the current pill from the pill control script
+	public void MoveCurrentPillHorizontally(int direction)
+	{
+		currentPillLeftHalf.ShiftHorizontally(direction);
+	}
+
+	// the current pill that is in control
+	PillHalf currentPillLeftHalf;
 	// Update is called once per frame
 	void Update()
 	{

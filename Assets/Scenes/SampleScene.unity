@@ -687,7 +687,7 @@ MonoBehaviour:
   yellow: {fileID: 2100000, guid: aeeceec2305e837688f8c26e00bf960f, type: 2}
   blue: {fileID: 2100000, guid: ec0aae25f5e57297492d2ff10cc9997a, type: 2}
   grey: {fileID: 2100000, guid: 7ea0df8629116f82eacd06b3d5f9fe8f, type: 2}
-  virusCount: 25
+  virusCount: 50
   virusPrefab: {fileID: 5071642872035543707, guid: 22241b05f21d4d032b9984f65a5973a1, type: 3}
   pillPrefab: {fileID: 8001982494529617100, guid: 9482fb16b3ee90f50bc3910695c14088, type: 3}
   blockFolder: {fileID: 285201010}
