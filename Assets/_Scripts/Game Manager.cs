@@ -27,7 +27,10 @@ public class GameManager : MonoBehaviour
 	{
 		// stores the blocks at each position in this 2D array, shared across all instances of this class
 		public static Block[,] gameBoard;
-
+		public static GameObject blockFolder;
+		
+		// the current instance of the game manager script
+		public static GameManager gameManager;
 		public static List<Block> fallingBlocks;
 
 		// the possible colors a block can be
@@ -44,9 +47,6 @@ public class GameManager : MonoBehaviour
 		// the game object of this block
 		protected GameObject part;
 
-		// the current instance of the game manager script
-		protected GameManager gameManager;
-
 		// the mesh renderer component that takes the material to show the color
 		protected MeshRenderer meshRenderer;
 
@@ -57,6 +57,12 @@ public class GameManager : MonoBehaviour
 		public Color GetColor
 		{
 			get { return color; }
+		}
+
+		public void SetBoardValue(int x, int y, Block value)
+		{
+			if (y < 16)
+				gameBoard[x, y] = value;
 		}
 
 		// the out variables are lists of all the positions of the same color in a row horizontally or vertically
@@ -165,10 +171,9 @@ public class GameManager : MonoBehaviour
 			}
 		}
 		// constructor
-		public Block(GameObject part, Color color, int x, int y, GameManager gameManager)
+		public Block(GameObject part, Color color, int x, int y)
 		{
 			this.part = part;
-			this.gameManager = gameManager;
 			this.x = x;
 			this.y = y;
 			
@@ -189,7 +194,7 @@ public class GameManager : MonoBehaviour
 			SetColor(color);
 		}
 		// this constructor ensures the mesh renderer is properly set
-		public Virus(GameObject part, Color color, int x, int y, GameManager gameManager) : base(part, color, x, y, gameManager)
+		public Virus(GameObject part, Color color, int x, int y) : base(part, color, x, y)
 		{
 			meshRenderer = part.transform.Find("Cube").GetComponent<MeshRenderer>();
 			SetColor(color);
@@ -201,25 +206,63 @@ public class GameManager : MonoBehaviour
 		// the instance of the other half of the pill
 		public PillHalf otherHalf;
 
+		public static GameObject pillPrefab;
+
+		// the current pill that is in control
+		public static PillHalf currentPillLeftHalf;
+
+		// current rotation of pill, in degrees
+		private int angle;
+
+		// creates a new pill with random colors for each side
+		public static void SpawnNewPill()
+		{
+			GameObject newPillObj = Instantiate(pillPrefab, blockFolder.transform);
+
+			// randomly select a color for each half, can be the same color for both
+			List<Color> possibleColors = new() 
+			{ 
+				Color.Red, 
+				Color.Yellow,
+				Color.Blue,
+			};
+			// randomly select a color for the virus
+			int colorIndex = Random.Range(0, possibleColors.Count);
+
+			PillHalf leftHalf = new(newPillObj, possibleColors.ElementAt(colorIndex), 3, 15, true);
+
+			colorIndex = Random.Range(0, possibleColors.Count);
+			PillHalf rightHalf = new(newPillObj, possibleColors.ElementAt(colorIndex), 4, 15, false);
+
+			leftHalf.otherHalf = rightHalf;
+			rightHalf.otherHalf = leftHalf;
+			
+			// only add left half since the fall function accounts for the other half
+			fallingBlocks.Add(leftHalf);
+
+			currentPillLeftHalf = leftHalf;
+		}
+
 		// overridden from block class, checks the other half of the pill when falling as well
 		public override void Fall()
 		{
 			int otherX = otherHalf.x;
 			int otherY = otherHalf.y;
 
-			// ensure both instances of y are above 0 (above bottom of pill bottom) and that there is no part directly below
-			if (y > 0 && gameBoard[x, y - 1] == null && otherY > 0 && (gameBoard[otherX, otherY - 1] == null || gameBoard[otherX, otherY - 1] == this))
+			// ensure both instances of y will 
+			if (y > 0 && (gameBoard[x, y - 1] == null || gameBoard[x, y - 1] == otherHalf) 
+				&& otherY > 0 && (gameBoard[otherX, otherY - 1] == null || gameBoard[otherX, otherY - 1] == this))
 			{
 				// lower both halves
-				gameBoard[x, y] = null;
-				gameBoard[otherX, otherY] = null;
+				SetBoardValue(x, y, null);
+				SetBoardValue(otherX, otherY, null);
 
 				y--;
 				otherY--;
 				otherHalf.y = otherY;
 
-				gameBoard[x, y] = this;
-				gameBoard[otherX, otherY] = otherHalf;
+				SetBoardValue(x, y, this);
+				SetBoardValue(otherX, otherY, otherHalf);
 
 				// only need to lower the part once since it is the whole pill
 				part.transform.position += Vector3.down;
@@ -233,36 +276,118 @@ public class GameManager : MonoBehaviour
 				part.GetComponent<PillControl>().enabled = false;
 
 				this.SameColorInARow(out List<Vector2> thisHorizontalMatches, out List<Vector2> thisVerticalMatches);
+
+				if (thisHorizontalMatches.Count >= 4)
+				{
+					
+				}
 				otherHalf.SameColorInARow(out List<Vector2> otherHorizontalMatches, out List<Vector2> otherVerticalMatches);
+				
+				SpawnNewPill();
 			}
 		}
 		// ensure when moving in the specified direction (-1 or 1) that there is nothing in the way
 		public void ShiftHorizontally(int direction)
 		{
 			if (x + direction >= 0 && x + direction < 8 && otherHalf.x + direction >= 0 && otherHalf.x + direction < 8 
-				&& (gameBoard[x + direction, y] == null || gameBoard[x + direction, y] == otherHalf)
-				&& (gameBoard[otherHalf.x + direction, otherHalf.y] == null || gameBoard[otherHalf.x + direction, otherHalf.y] == this))
+				&& (y == 16 || gameBoard[x + direction, y] == null || gameBoard[x + direction, y] == otherHalf)
+				&& (otherHalf.y == 16 || gameBoard[otherHalf.x + direction, otherHalf.y] == null 
+					|| gameBoard[otherHalf.x + direction, otherHalf.y] == this))
 			{
 				// make the proper blocks null and add the direction to both halve's x value
-				gameBoard[x, y] = null;
-				gameBoard[otherHalf.x, otherHalf.y] = null;
+				SetBoardValue(x, y, null);
+				SetBoardValue(otherHalf.x, otherHalf.y, null);
 
 				x += direction;
 				otherHalf.x += direction;
 			
-				gameBoard[x, y] = this;
-				gameBoard[otherHalf.x, otherHalf.y] = otherHalf;
+				SetBoardValue(x, y, this);
+				SetBoardValue(otherHalf.x, otherHalf.y, otherHalf);
 				
 				// part for pill half is the whole pill so only need to move it once
 				part.transform.position += new Vector3(direction, 0, 0);
 			}
 		}
 		// the part is the whole pill while the renderer is just of one half
-		public PillHalf(GameObject part, Color color, int x, int y, bool leftSide, GameManager gameManager) 
-			: base(part, color, x, y, gameManager)
+
+		public void Rotate()
+		{
+			int nextAngle = angle + 90;
+
+			if (nextAngle == 360)
+				nextAngle = 0;
+
+			Vector3 positionOffset = Vector3.zero;
+			
+			int nextX = x;
+			int nextY = y;
+			int nextOtherX = otherHalf.x;
+			int nextOtherY = otherHalf.y;
+
+			switch (nextAngle)
+			{
+				case 0:
+					nextOtherX++;
+					nextOtherY--;
+					break;
+				case 90:
+					positionOffset += Vector3.up;
+					nextY++;
+					nextOtherX--;
+					break;
+				case 180:
+					positionOffset += Vector3.down + Vector3.right;
+					nextX++;
+					nextY--;
+					break;
+				case 270:
+					positionOffset += Vector3.left;
+					nextX--;
+					nextOtherY++;
+					break;
+			}
+			
+			if ((angle == 90 || angle == 270)
+				&& (nextX > 7 || nextOtherX > 7 || (nextY < 16 && (gameBoard[nextX, nextY] != null && gameBoard[nextX, nextY] != this && gameBoard[nextX, nextY] != otherHalf)) 
+				|| (nextOtherY < 16 
+					&& (gameBoard[nextOtherX, nextOtherY] != null && gameBoard[nextOtherX, nextOtherY] != this && gameBoard[nextOtherX, nextOtherY] != otherHalf))))
+			{ 
+				nextX--;
+				nextOtherX--;
+				positionOffset += Vector3.left;
+			}
+
+			Debug.Log($"{nextX} {nextY}, {nextOtherX} {nextOtherY}");
+			if (nextX >= 0 && nextOtherX >= 0
+				&& (nextY ==  16 || gameBoard[nextX, nextY] == null || gameBoard[nextX, nextY] == this || gameBoard[nextX, nextY] == otherHalf) 
+				&& (nextOtherY == 16 || gameBoard[nextOtherX, nextOtherY] == null || gameBoard[nextOtherX, nextOtherY] == this 
+					|| gameBoard[nextOtherX, nextOtherY] == otherHalf))
+			{
+				SetBoardValue(x, y, null);
+				SetBoardValue(otherHalf.x, otherHalf.y, null);
+
+				x = nextX;
+				y = nextY;
+
+				otherHalf.x = nextOtherX;
+				otherHalf.y = nextOtherY;
+
+				SetBoardValue(x, y, this);
+				SetBoardValue(otherHalf.x, otherHalf.y, otherHalf);
+
+				angle = nextAngle;
+
+				part.transform.Rotate(new (90, 0, 0));
+				part.transform.position += positionOffset;
+			}
+		}
+
+		public PillHalf(GameObject part, Color color, int x, int y, bool leftSide) 
+			: base(part, color, x, y)
 		{
 			meshRenderer = part.transform.Find("Pill" + (leftSide ? "Left" : "Right")).GetComponent<MeshRenderer>();
 			SetColor(color);
+			angle = 0;
 		}
 	}
 	private float timeElapsedSinceUpdate = 0.0f;
@@ -276,7 +401,7 @@ public class GameManager : MonoBehaviour
 		virusObject.transform.position = new Vector3(x, y, 0);
 
 		// the new instance of the virus
-		Virus virus = new(virusObject, color, x, y, this);
+		Virus virus = new(virusObject, color, x, y);
 
 		// get the matching horizontal and vertical blocks
 		virus.SameColorInARow(out List<Vector2> horizontalMatches, out List<Vector2> verticalMatches);
@@ -305,42 +430,9 @@ public class GameManager : MonoBehaviour
 			possibleColors.RemoveAt(colorIndex);
 		}
 	}
-	// creates a new pill with random colors for each side
-	private void SpawnNewPill()
+
+	private void RandomlyGenerateViruses()
 	{
-		GameObject newPillObj = Instantiate(pillPrefab, blockFolder.transform);
-
-		// randomly select a color for each half, can be the same color for both
-		List<Block.Color> possibleColors = new() 
-		{ 
-			Block.Color.Red, 
-			Block.Color.Yellow,
-			Block.Color.Blue,
-		};
-		// randomly select a color for the virus
-		int colorIndex = Random.Range(0, possibleColors.Count);
-
-		PillHalf leftHalf = new(newPillObj, possibleColors.ElementAt(colorIndex), 3, 16, true, this);
-
-		colorIndex = Random.Range(0, possibleColors.Count);
-		PillHalf rightHalf = new(newPillObj, possibleColors.ElementAt(colorIndex), 4, 16, false, this);
-
-		leftHalf.otherHalf = rightHalf;
-		rightHalf.otherHalf = leftHalf;
-		
-		// only add left half since the fall function accounts for the other half
-		Block.fallingBlocks.Add(leftHalf);
-
-		currentPillLeftHalf = leftHalf;
-	}
-	// Start is called before the first frame update
-	void Start()
-	{
-		// initialize game board, lowest coordinate is (0, 0) and the highest is (7, 16), y has 17 levels for the level that the pill starts at
-		Block.gameBoard = new Block[8, 17];
-
-		Block.fallingBlocks = new();
-
 		// this list contains all available spots for a virus to generate
 		List<Vector2> possibleVirusSpots = new();
 
@@ -353,7 +445,7 @@ public class GameManager : MonoBehaviour
 				possibleVirusSpots.Add(new(x, y));
 			}
 		}
-		
+
 		// loop to place the specified amount of viruses
 		for (int i = 0; i < virusCount; i++)
 		{
@@ -377,18 +469,55 @@ public class GameManager : MonoBehaviour
 			// remove the position from the list of available positions since a virus is now there
 			possibleVirusSpots.RemoveAt(positionIndex);
 		}
+	}
+	// simply generates viruses in a way to easily test certain edge cases with rotating
+	private void GenerateRotateTestLevel()
+	{
+		InsertVirus(1, 0, Block.Color.Red);
+		InsertVirus(1, 1, Block.Color.Red);
+		InsertVirus(1, 2, Block.Color.Red);
+		InsertVirus(1, 3, Block.Color.Red);
+		InsertVirus(3, 1, Block.Color.Red);
+		InsertVirus(3, 3, Block.Color.Red);
+		InsertVirus(4, 0, Block.Color.Red);
+		InsertVirus(4, 4, Block.Color.Red);
+		InsertVirus(5, 1, Block.Color.Red);
+		InsertVirus(5, 3, Block.Color.Red);
 
-		SpawnNewPill();
+		InsertVirus(2, 8, Block.Color.Red);
+		InsertVirus(2, 10, Block.Color.Red);
+		InsertVirus(3, 8, Block.Color.Red);
+		InsertVirus(3, 11, Block.Color.Red);
+		InsertVirus(4, 8, Block.Color.Red);
+		InsertVirus(4, 10, Block.Color.Red);
+	}
+	// Start is called before the first frame update
+	void Start()
+	{
+		// initialize game board, lowest coordinate is (0, 0) and the highest is (7, 15)
+		Block.gameBoard = new Block[8, 16];
+		Block.gameManager = this;
+		Block.blockFolder = this.blockFolder;
+		PillHalf.pillPrefab = this.pillPrefab;
+		Block.fallingBlocks = new();
+
+		RandomlyGenerateViruses();
+		//GenerateRotateTestLevel();
+
+		PillHalf.SpawnNewPill();
 	}
 
 	// for outside calls, allow moving the current pill from the pill control script
 	public void MoveCurrentPillHorizontally(int direction)
 	{
-		currentPillLeftHalf.ShiftHorizontally(direction);
+		PillHalf.currentPillLeftHalf.ShiftHorizontally(direction);
+	}
+	// allow pill control script to rotate current pill
+	public void RotateCurrentPill()
+	{
+		PillHalf.currentPillLeftHalf.Rotate();
 	}
 
-	// the current pill that is in control
-	PillHalf currentPillLeftHalf;
 	// Update is called once per frame
 	void Update()
 	{

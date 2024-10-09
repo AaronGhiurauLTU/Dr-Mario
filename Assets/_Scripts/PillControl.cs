@@ -6,7 +6,14 @@ public class PillControl : MonoBehaviour
 {
     public KeyCode left;
     public KeyCode right;
-
+	public KeyCode rotate;
+	// minimum time between moving left or right
+	public float horizontalCoolDown = 0.2f;
+	public float coolDownInitialMultiplier = 2.5f;
+	private float timeSinceHorizontalMove = 0;
+	private int timesMovedInARow = 0;
+	private float coolDownMultiplier = 1;
+	private KeyCode lastHorizontalKey;
 	GameManager gameManager;
 
 	void Start()
@@ -16,17 +23,38 @@ public class PillControl : MonoBehaviour
 	}
     void Update()
     {
-		// don't allow moving the pill left or right when it first spawns in at y = 16
-		if (transform.position.y > 15)
-			return;
+		timeSinceHorizontalMove += Time.deltaTime;
 
-        if (Input.GetKeyDown(left))
-        {
-			gameManager.MoveCurrentPillHorizontally(-1);
-        } 
-        else if (Input.GetKeyDown(right))
-        {
-			gameManager.MoveCurrentPillHorizontally(1);
-        }
+		if (Input.GetKey(left) || Input.GetKey(right))
+		{
+			KeyCode currentKey = Input.GetKey(left) ? left : right;
+
+			if (lastHorizontalKey != currentKey)
+				timesMovedInARow = 0;
+
+			if (timesMovedInARow == 0)
+				coolDownMultiplier = 0f;
+			else if (timesMovedInARow == 1)
+				coolDownMultiplier = coolDownInitialMultiplier;
+			else
+				coolDownMultiplier = 1;
+
+		    if (timeSinceHorizontalMove >= horizontalCoolDown * coolDownMultiplier) 
+			{
+				timesMovedInARow++;
+				timeSinceHorizontalMove = 0;
+				lastHorizontalKey = currentKey;
+				gameManager.MoveCurrentPillHorizontally(lastHorizontalKey == left ? -1 : 1);				
+			}
+		}
+		else
+		{
+			timesMovedInARow = 0;
+		}
+
+		if (Input.GetKeyDown(rotate))
+		{
+			gameManager.RotateCurrentPill();
+		}
     }
 }
