@@ -299,5 +299,6 @@ MonoBehaviour:
   left: 276
   right: 275
   rotate: 273
+  down: 274
   horizontalCoolDown: 0.06
   coolDownInitialMultiplier: 2.5
