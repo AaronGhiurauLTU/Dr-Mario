@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using TMPro;
 using UnityEditor.Experimental.GraphView;
 using UnityEngine;
 
@@ -20,6 +21,9 @@ public class GameManager : MonoBehaviour
 		virusPrefab,
 		pillPrefab,
 		blockFolder;
+
+	public TextMeshProUGUI scoreTMP,
+		virusCountTMP;
 
 	// in seconds, the amount of time between updating falling objects
 	public float gravityInterval;
@@ -70,6 +74,16 @@ public class GameManager : MonoBehaviour
 			virus.SameColorInARow(out horizontalMatches, out verticalMatches);
 			possibleColors.RemoveAt(colorIndex);
 		}
+	}
+
+	public void UpdateScore()
+	{
+		scoreTMP.text = $"Score: {Block.score}";
+	}
+
+	public void UpdateVirusCount()
+	{
+		virusCountTMP.text = $"Viruses: {Virus.virusesRemaining}";
 	}
 
 	private void RandomlyGenerateViruses()
@@ -151,8 +165,12 @@ public class GameManager : MonoBehaviour
 	// Start is called before the first frame update
 	void Start()
 	{
-		// for debugging, make rng consistent 
-		// Random.InitState(1);
+		// randomly generate a seed for the rng so bugs can be replicated easier by setting the seed manually
+		int seed = Random.Range(1, 100000);
+		Debug.Log($"The seed is: {seed}");
+		//seed = 56672;
+ 
+		Random.InitState(seed);
 
 		// initialize game board, lowest coordinate is (0, 0) and the highest is (7, 15)
 		Block.gameBoard = new Block[8, 16];

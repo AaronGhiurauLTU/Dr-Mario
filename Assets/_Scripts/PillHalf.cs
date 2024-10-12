@@ -46,42 +46,41 @@ public class PillHalf : Block
 		rightHalf.otherHalf = leftHalf;
 
 		// only add left half since the fall function accounts for the other half
-		leftHalf.UpdateFallingList();
+		leftHalf.UpdateFallingSet();
 
 		currentPillLeftHalf = leftHalf;
 	}
 
 	// split the pill, destroying the entire pill and replacing the half that should be kept with a normal block
-	private void Split(bool destroyOther)
+	private void Split(bool destroyOther, HashSet<Block>[] blocksToClear = null)
 	{
 		// get the necessary information of the half being "kept" to create the new block
 		GameObject newBlockObj = Object.Instantiate(blockPrefab, blockFolder.transform);
-		Color color = destroyOther ? this.GetColor : otherHalf.GetColor;
-		int keepingX = destroyOther ? this.x : otherHalf.x;
-		int keepingY = destroyOther ? this.y : otherHalf.y;
-		Block keepingBlockOnTop = destroyOther ? this.blockOnTop : otherHalf.blockOnTop;
-		Block oldBlockBelow = destroyOther ? this.blockBelow : otherHalf.blockBelow;
+		Block keepingBlock = destroyOther ? this : otherHalf;
 
 		// empty the board values
 		SetBoardValue(x, y, null);
 		SetBoardValue(otherHalf.x, otherHalf.y, null);
 
+		// the part is the whole pill so it doesn't matter which side it is from
 		Object.Destroy(part);
+		part = null;
+		otherHalf.part = null;
 
-		Block newBlock = new(newBlockObj, color, keepingX, keepingY, blockOnTop: keepingBlockOnTop);
+		Block newBlock = new(newBlockObj, keepingBlock.GetColor, keepingBlock.x, keepingBlock.y, blockOnTop: keepingBlock.blockOnTop);
 
 		// ensure the block below has the proper instance of the new block
-		if (keepingBlockOnTop != null)
+		if (keepingBlock.blockOnTop != null)
 		{
-			keepingBlockOnTop.blockBelow = newBlock;
+			keepingBlock.blockOnTop.blockBelow = newBlock;
 		}
 		// set the block on top of the block below to null as the new block will be falling and will update the value properly
-		if (oldBlockBelow != null)
+		if (keepingBlock.blockBelow != null)
 		{
-			oldBlockBelow.blockOnTop = null;
+			keepingBlock.blockBelow.blockOnTop = null;
 		}
-		// add the new block to the falling list which should add the blocks on top as well
-		newBlock.UpdateFallingList();
+		// add the new block to the falling set which should add the blocks on top as well
+		newBlock.UpdateFallingSet(blocksToClear);
 	}
 	// overridden, split the pill if only one half is going to be cleared; otherwise, destroy the entire pill
 	public override void Clear(HashSet<Block>[] blocksToClear)
@@ -89,23 +88,15 @@ public class PillHalf : Block
 		// the other half of the pill may have already cleared, if so skip the rest as the pill should already be destroyed
 		if (part == null)
 			return;
-
+		
 		// true if the other half is going to cleared as well
-		bool containsOtherHalf = false;
-
-		foreach (HashSet<Block> list in blocksToClear)
-		{
-			// if the list is large enough and has the value, set containsOtherHalf to true
-			if (list.Count >= 4 && list.Contains(otherHalf))
-			{
-				containsOtherHalf = true;
-				break;
-			}	
-		}
+		bool containsOtherHalf = SearchSetsForBlock(blocksToClear, otherHalf, false);
 
 		// since the other half is going to be cleared, destroy the whole pill
 		if (containsOtherHalf)
 		{
+			UpdateAboveAndBelowBlocks(blocksToClear);
+			otherHalf.UpdateAboveAndBelowBlocks(blocksToClear);
 			SetBoardValue(x, y, null);
 			SetBoardValue(otherHalf.x, otherHalf.y, null);
 			Object.Destroy(part);
@@ -115,7 +106,27 @@ public class PillHalf : Block
 		else
 		{
 			// split the pill since only half the pill is getting cleared
-			Split(false);
+			Split(false, blocksToClear);
+		}
+	}
+
+	public override void UpdateFallingSet(HashSet<Block>[] blocksToClear = null)
+	{
+		bool thisContainsTop = SearchSetsForBlock(blocksToClear, blockOnTop, true);
+		bool otherContainsTop = SearchSetsForBlock(blocksToClear, otherHalf.blockOnTop, true);
+		Debug.Log($"{Time.time}: {x}, {y} color: {GetColor} type: {GetType()} length: {Block.fallingBlocks.Count}");
+		fallingBlocks.Add(this);
+
+		if (blockOnTop != null && !thisContainsTop)
+		{
+			Debug.Log(blockOnTop.x + " THIS" + blockOnTop.y + " " + blockOnTop.GetType() + " " + x + " " + y + " " + GetType());
+			blockOnTop.UpdateFallingSet(blocksToClear);
+		}
+
+		if (otherHalf.blockOnTop != null && !otherContainsTop)
+		{
+			Debug.Log(otherHalf.blockOnTop.x + " OTHER" + otherHalf.blockOnTop.y + " " + otherHalf.blockOnTop.GetType() + " " + otherHalf.x + " " + otherHalf.y + " " + otherHalf.GetType());
+			otherHalf.blockOnTop.UpdateFallingSet(blocksToClear);
 		}
 	}
 	// overridden from block class, checks the other half of the pill when falling as well
@@ -199,7 +210,7 @@ public class PillHalf : Block
 		otherHalf.SameColorInARow(out HashSet<Block> otherHorizontalMatches, 
 			out HashSet<Block> otherVerticalMatches);
 
-		// minimum size is 2, one horizontal and vertical list	
+		// minimum size is 2, one horizontal and vertical set
 		int currentSize = 2;
 
 		// increment the size if the sets aren't equal, they can be equal if both sides of the pill are part of a single 4+ in a row match
@@ -215,10 +226,10 @@ public class PillHalf : Block
 		allMatches[0] = thisHorizontalMatches;
 		allMatches[1] = thisVerticalMatches;
 
-		// the index of the next lists if they can be added
+		// the index of the next sets if they can be added
 		int currentIndex = 2;
 
-		// only add the lists if they are different, increment the index if it is added
+		// only add the sets if they are different, increment the index if it is added
 		if (!thisHorizontalMatches.SetEquals(otherHorizontalMatches))
 		{
 			allMatches[currentIndex] = otherHorizontalMatches;
@@ -229,7 +240,7 @@ public class PillHalf : Block
 		{
 			allMatches[currentIndex] = otherVerticalMatches;
 		}
-		// send the lists to clear the ones large enough
+		// send the sets to clear the ones large enough
 		ClearBlocks(allMatches);
 	}
 	// ensure when moving in the specified direction (-1 or 1) that there is nothing in the way
