@@ -40,6 +40,9 @@ public class GameManager : MonoBehaviour
 	// the blocks that need to be checked for new matches after all blocks stop falling
 	private HashSet<Block> blocksToCheck;
 
+	private bool tryMakingBlocksFallAgain = false;
+
+	// TODO: move to virus class
 	// insert a virus at the specified position and possibly the specified color
 	private void InsertVirus(int x, int y, Block.Color color)
 	{
@@ -76,14 +79,14 @@ public class GameManager : MonoBehaviour
 		}
 	}
 
-	public void UpdateScore()
+	public void UpdateScore(int score)
 	{
-		scoreTMP.text = $"Score: {Block.score}";
+		scoreTMP.text = $"Score: {score}";
 	}
 
-	public void UpdateVirusCount()
+	public void UpdateVirusCount(int virusCount)
 	{
-		virusCountTMP.text = $"Viruses: {Virus.virusesRemaining}";
+		virusCountTMP.text = $"Viruses: {virusCount}";
 	}
 
 	private void RandomlyGenerateViruses()
@@ -167,9 +170,9 @@ public class GameManager : MonoBehaviour
 	{
 		// randomly generate a seed for the rng so bugs can be replicated easier by setting the seed manually
 		int seed = Random.Range(1, 100000);
+		//seed = 2;
 		Debug.Log($"The seed is: {seed}");
-		//seed = 56672;
- 
+
 		Random.InitState(seed);
 
 		// initialize game board, lowest coordinate is (0, 0) and the highest is (7, 15)
@@ -177,8 +180,9 @@ public class GameManager : MonoBehaviour
 		Block.gameManager = this;
 		Block.blockFolder = this.blockFolder;
 		Block.blockPrefab = this.blockPrefab;
+		Block.stillFalling = new();
+		Block.blocksThatMayFall = new();
 		PillHalf.pillPrefab = this.pillPrefab;
-		Block.fallingBlocks = new();
 		blocksToCheck = new();
 		RandomlyGenerateViruses();
 		//GenerateRotateTestLevel();
@@ -199,53 +203,83 @@ public class GameManager : MonoBehaviour
 			timeElapsedSinceUpdate = 0;
 
 			// if there is nothing falling
-			if (Block.fallingBlocks.Count == 0)
+			if (Block.stillFalling.Count == 0 && !tryMakingBlocksFallAgain)
 			{
 				/* if there are blocks to check, check them now after everything finished falling
 				   this is so smaller matches aren't cleared before everything falls */
 				if (blocksToCheck.Count > 0)
 				{
+					// the blocks that will be cleared due to being in matches >= 4
+					HashSet<Block> blocksToClear = new();
+					
+					// append matches from each block to the set
 					foreach (Block block in blocksToCheck)
 					{
-						block.CheckMatchesToClear();
+						blocksToClear.UnionWith(block.CheckMatchesToClear());
 					}
+					// clear the blocks that need to be cleared
+					if (blocksToClear.Count > 0)
+					{
+						// ensure the first virus cleared per turn gives the minimum amount of points
+						Virus.ResetBonusPointGain();
+
+						foreach (Block block in blocksToClear)
+						{
+							block.Clear(blocksToClear);
+						}
+						// check for blocks that may need to fall after clearing these blocks
+						tryMakingBlocksFallAgain = true;
+					}
+					else
+					{
+						tryMakingBlocksFallAgain = false;
+					}
+					// empty the set since all these blocks were checked
 					blocksToCheck = new();
 				}
 				else
 				{
 					// spawn a pill one interval after checking
 					PillHalf.SpawnNewPill();
+					tryMakingBlocksFallAgain = false;
 				}
 			}
 			else
 			{
-				// sort the list in ascending order by y level so higher blocks don't stop to rest on a block that will later fall
-				Block.SortFallingBlocks();
-
-				/* stores a dictionary of blocks that stopped falling where the value is true if it should not check for matches
-				   this occurs when a pill is split halfway off the top of the board as the newly spawned block will do the checking */
-				Dictionary<Block, bool> stoppedFalling = new();
-
-				// copy of the currently falling blocks that won't get modified as it calls the fall method of each block
-				HashSet<Block> fallingBlocksCopy = new(Block.fallingBlocks);
-
-				// iterate through list of blocks that need to fall and call their fall function
-				foreach (Block block in fallingBlocksCopy)
+				// only need to check the pill in control if it still is in control to make it fall
+				if (PillHalf.currentPillLeftHalf != null)
 				{
-					// if it returns true, it stopped falling
-					if (block.Fall(out bool doNotCheck))
+					if (PillHalf.currentPillLeftHalf.Fall(out bool doNotCheck))
 					{
-						stoppedFalling.Add(block, doNotCheck);
+						Block.stillFalling.Add(PillHalf.currentPillLeftHalf);
+					}
+					else if (Block.stillFalling.Contains(PillHalf.currentPillLeftHalf))
+					{
+						/* if the pill stopped falling, remove it from the list and add it to the checking list if it needs to be checked
+						   it does not need to be checked if it is places halfway above the game board as the pill gets destroyed and
+						   replaced with a normal block */
+						Block.stillFalling.Remove(PillHalf.currentPillLeftHalf);
+
+						if (!doNotCheck)
+							blocksToCheck.Add(PillHalf.currentPillLeftHalf);
 					}
 				}
-				// remove the blocks that stopped falling from the list and add blocks to the check list only if they need checking
-				foreach (KeyValuePair<Block, bool> blockDoNotCheckPair in stoppedFalling)
+				else
 				{
-					Block.fallingBlocks.Remove(blockDoNotCheckPair.Key);
-
-					if (!blockDoNotCheckPair.Value)
-						blocksToCheck.Add(blockDoNotCheckPair.Key);
+					foreach (Block block in Block.blocksThatMayFall)
+					{
+						if (block.Fall(out bool _))
+						{
+							Block.stillFalling.Add(block);
+						}
+						else if (Block.stillFalling.Contains(block))
+						{
+							Block.stillFalling.Remove(block);
+							blocksToCheck.Add(block);
+						}
+					}
 				}
+				tryMakingBlocksFallAgain = false;
 			}
 		}
 		// reset to false at the end as it will be set to true every time down is held down

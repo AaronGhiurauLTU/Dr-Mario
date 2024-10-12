@@ -12,17 +12,22 @@ public class Block
 	public static Block[,] gameBoard;
 	
 	// current score of player
-	public static int score;
+	protected static int score;
+
+	// this set contains all blocks that are able to fall at some point (everything but viruses)
+	public static HashSet<Block> blocksThatMayFall;
+
+	// this set contains all blocks that have fallen during the last gravity interval
+	public static HashSet<Block> stillFalling;
 
 	// the game object that new blocks are placed in
 	public static GameObject blockFolder;
+
+	// the block prefab
 	public static GameObject blockPrefab;
 
 	// the current instance of the game manager script
 	public static GameManager gameManager;
-
-	// a set of all falling blocks, hashset is simply a set of unique values
-	public static HashSet<Block> fallingBlocks;
 
 	// the possible colors a block can be
 	public enum Color
@@ -32,12 +37,6 @@ public class Block
 		Blue,
 		Grey
 	}
-	// the block that is below this instance, is null if there is nothing below
-	public Block blockBelow;
-
-	// the block that is on top of this instance, is null if there is nothing above
-	public Block blockOnTop;
-
 	// the coordinates of the block
 	public int x, y;
 
@@ -62,97 +61,36 @@ public class Block
 			gameBoard[x, y] = value;
 	}
 	/* get the horizontal and vertical set of matches and forward them to the clear blocks method to determine which ones are large enough
-	   this method gets overridden in the pill half, the array is used as it likely will be larger */
-	public virtual void CheckMatchesToClear()
+	   this method gets overridden in the pill half, returns all matches that were large enough to be cleared */
+	public virtual HashSet<Block> CheckMatchesToClear()
 	{
 		SameColorInARow(out HashSet<Block> horizontalMatches, out HashSet<Block> verticalMatches);
 
-		HashSet<Block>[] allMatches = new HashSet<Block>[]
-		{
-				horizontalMatches,
-				verticalMatches
-		};
+		HashSet<Block> matches = new();
 
-		ClearBlocks(allMatches);
-	}
-	// call every blocks clear method in the specified sets if they are long enough
-	public static void ClearBlocks(HashSet<Block>[] blocksToClear)
-	{
-		foreach (HashSet<Block> set in blocksToClear)
-		{
-			// skip set if it is too small
-			if (set.Count < 4)
-				continue;
+		// add the sets only if they are large enough
+		if (horizontalMatches.Count >= 4)
+			matches.UnionWith(horizontalMatches);
+		if (verticalMatches.Count >= 4)
+			matches.UnionWith(verticalMatches);
 
-			foreach (Block block in set)
-			{
-				block.Clear(blocksToClear);
-			}
-		}
+		return matches;
 	}
 	// destroy the current block, parameter is simply for helper functions, particularly in overridden versions of this method
-	public virtual void Clear(HashSet<Block>[] blocksToClear)
+	public virtual void Clear(HashSet<Block> blocksToClear)
 	{
-		if (part == null)
-			return;
-
-		UpdateAboveAndBelowBlocks(blocksToClear);
+		DestroyBlock();
+	}
+	// destroy the block, ensuring it is not in the game board and in the blocks that may fall set
+	protected void DestroyBlock()
+	{
 		SetBoardValue(x, y, null);
-		Object.Destroy(part);
+
+		if (part != null)
+			Object.Destroy(part);
+
 		part = null;
-	}
-	// when clearing a block, ensure the block above and below get properly updated
-	public void UpdateAboveAndBelowBlocks(HashSet<Block>[] blocksToClear)
-	{
-		bool containsTop = SearchSetsForBlock(blocksToClear, blockOnTop, true);
-		if (blockOnTop != null)
-		{
-			// don't make the block above fall if it will be cleared
-			if (!containsTop)
-				blockOnTop.UpdateFallingSet(blocksToClear);
-
-			blockOnTop.blockBelow = null;
-			blockOnTop = null;
-		}
-
-		if (blockBelow != null)
-		{
-			blockBelow.blockOnTop = null;
-			blockBelow = null;
-		}
-	}
-	/* search the sets of blocks that were matched for the target and possible the other half if the target was a pill
-	   returns true if the target or other pill half (if it exists) was found in a long enough sets */
-	public bool SearchSetsForBlock(HashSet<Block>[] blocksToClear, Block target, bool checkOtherPillHalf)
-	{
-		// if the sets or target is null, simply return false
-		if (blocksToClear == null || target == null)
-			return false;
-
-		bool blockFound = false;
-
-		// the other half of the pill if the target is a pill half
-		Block otherTarget = null;
-
-		// set otherTarget to the other half if it should check and the target is the right type
-		if (checkOtherPillHalf && target.GetType() == typeof(PillHalf))
-		{
-			PillHalf thisHalf = (PillHalf)target;
-			otherTarget = thisHalf.otherHalf;
-		}
-		
-		// iterate through every set
-		foreach (HashSet<Block> set in blocksToClear)
-		{
-			// if the set is large enough and has the value, set blockFound to true
-			if (set.Count >= 4 && (set.Contains(target) || (otherTarget != null && set.Contains(otherTarget))))
-			{
-				blockFound = true;
-				break;
-			}	
-		}
-
-		return blockFound;
+		blocksThatMayFall.Remove(this);
 	}
 	// the out variables are sets of all the positions of the same color in a row horizontally or vertically
 	public void SameColorInARow(out HashSet<Block> horizontalMatches, out HashSet<Block> verticalMatches)
@@ -176,7 +114,8 @@ public class Block
 		checkingDirection = Vector2.up;
 		verticalMatches.UnionWith(CheckColorsInDirection(checkingDirection, color));
 	}
-	// this returns the set of all blocks with the same color in the direction until a different color, empty space, or edge of game board is reached
+	/* this returns the set of all blocks with the same color in the direction until a different color, empty space, 
+	   or edge of game board is reached, this is a helper function for SameColorInARow */
 	private HashSet<Block> CheckColorsInDirection(Vector2 direction, Color color)
 	{
 		// the coordinate of the current block being checked
@@ -212,11 +151,6 @@ public class Block
 
 		return matches;
 	}
-	// sort the falling blocks in ascending order by y level
-	public static void SortFallingBlocks()
-	{
-		fallingBlocks = fallingBlocks.OrderBy(o => o.y).ToHashSet();
-	}
 	// sets the color of the mesh renderer if it exists
 	protected void SetColor(Color color)
 	{
@@ -242,7 +176,8 @@ public class Block
 
 		this.color = color;
 	}
-	// overridable for pill, falls until it reaches the bottom or a block is directly below it and returns true if it stopped falling
+	/* overridable, falls until it reaches the bottom or a block is directly below it and returns true if it fell
+	   the out variable is false in most cases, but is true when the block should not be checked for matches (pills splitting) */
 	public virtual bool Fall(out bool doNotCheck)
 	{
 		doNotCheck = false;
@@ -258,57 +193,26 @@ public class Block
 
 			part.transform.position += Vector3.down;
 
-			return false;
+			return true;
 		}
 		else
 		{
-			// stop falling since there is no room to fall
-
-			// update the blocks below and blocks on top
-			if (y > 0)
-			{
-				blockBelow = gameBoard[x, y - 1];
-				blockBelow.blockOnTop = this;
-			}
-			else if (blockBelow != null)
-			{
-				// the block reached the bottom
-				blockBelow.blockOnTop = null;
-				blockBelow = null;
-			}
-
-			return true;
+			return false;
 		}
 	}
-	// recursively add all blocks resting on top of this block to the falling set
-	public virtual void UpdateFallingSet(HashSet<Block>[] blocksToClear = null)
-	{
-		bool containsTop = SearchSetsForBlock(blocksToClear, blockOnTop, true);
-		
-		Debug.Log($"{Time.time}: {x}, {y} color: {GetColor} type: {GetType()} length: {Block.fallingBlocks.Count}");
-		fallingBlocks.Add(this);
-
-		if (blockOnTop != null && !containsTop)
-		{
-			Debug.Log(blockOnTop.x + " " + blockOnTop.y + " " + blockOnTop.GetType() + " " + x + " " + y + " " + GetType());
-			blockOnTop.UpdateFallingSet(blocksToClear);
-		}
-	}
-	// constructor
-	public Block(GameObject part, Color color, int x, int y, Block blockOnTop = null)
+	// constructor, initialize the proper variables and set the color of the block
+	public Block(GameObject part, Color color, int x, int y)
 	{
 		this.part = part;
 		this.x = x;
 		this.y = y;
 
-		// when a pill splits, the block needs to get the proper block on top
-		this.blockOnTop = blockOnTop;
-		this.blockBelow = null;
-
 		gameBoard[x, y] = this;
 		part.transform.position = new(x, y, 0);
 		meshRenderer = part.GetComponent<MeshRenderer>();
 		SetColor(color);
+
+		blocksThatMayFall.Add(this);
 	}
 }
 

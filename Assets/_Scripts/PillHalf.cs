@@ -21,6 +21,12 @@ public class PillHalf : Block
 	// current rotation of pill (0, 90, 180, or 270 degrees) and not necessarily the same as the transform but exists for ease of reading
 	private int angle;
 
+	// is true if it is the left half of the pill when instantiating; false if its the right side
+	private readonly bool isLeftHalf;
+
+	// the amount of times the pill was determined to be resting on something while falling
+	private int timesRestedOnSomething;
+
 	// creates a new pill with random colors for each side
 	public static void SpawnNewPill()
 	{
@@ -45,203 +51,27 @@ public class PillHalf : Block
 		leftHalf.otherHalf = rightHalf;
 		rightHalf.otherHalf = leftHalf;
 
-		// only add left half since the fall function accounts for the other half
-		leftHalf.UpdateFallingSet();
-
 		currentPillLeftHalf = leftHalf;
+
+		// ensure the pill is in the list
+		stillFalling.Add(currentPillLeftHalf);
 	}
 
 	// split the pill, destroying the entire pill and replacing the half that should be kept with a normal block
-	private void Split(bool destroyOther, HashSet<Block>[] blocksToClear = null)
+	private void Split(bool destroyOther)
 	{
 		// get the necessary information of the half being "kept" to create the new block
 		GameObject newBlockObj = Object.Instantiate(blockPrefab, blockFolder.transform);
 		Block keepingBlock = destroyOther ? this : otherHalf;
 
-		// empty the board values
-		SetBoardValue(x, y, null);
-		SetBoardValue(otherHalf.x, otherHalf.y, null);
+		// destroy the pill since the remaining half is simulated with a separate block
+		DestroyBlock();
+		otherHalf.DestroyBlock();
 
-		// the part is the whole pill so it doesn't matter which side it is from
-		Object.Destroy(part);
-		part = null;
-		otherHalf.part = null;
-
-		Block newBlock = new(newBlockObj, keepingBlock.GetColor, keepingBlock.x, keepingBlock.y, blockOnTop: keepingBlock.blockOnTop);
-
-		// ensure the block below has the proper instance of the new block
-		if (keepingBlock.blockOnTop != null)
-		{
-			keepingBlock.blockOnTop.blockBelow = newBlock;
-		}
-		// set the block on top of the block below to null as the new block will be falling and will update the value properly
-		if (keepingBlock.blockBelow != null)
-		{
-			keepingBlock.blockBelow.blockOnTop = null;
-		}
-		// add the new block to the falling set which should add the blocks on top as well
-		newBlock.UpdateFallingSet(blocksToClear);
-	}
-	// overridden, split the pill if only one half is going to be cleared; otherwise, destroy the entire pill
-	public override void Clear(HashSet<Block>[] blocksToClear)
-	{
-		// the other half of the pill may have already cleared, if so skip the rest as the pill should already be destroyed
-		if (part == null)
-			return;
+		Block newBlock = new(newBlockObj, keepingBlock.GetColor, keepingBlock.x, keepingBlock.y);
 		
-		// true if the other half is going to cleared as well
-		bool containsOtherHalf = SearchSetsForBlock(blocksToClear, otherHalf, false);
-
-		// since the other half is going to be cleared, destroy the whole pill
-		if (containsOtherHalf)
-		{
-			UpdateAboveAndBelowBlocks(blocksToClear);
-			otherHalf.UpdateAboveAndBelowBlocks(blocksToClear);
-			SetBoardValue(x, y, null);
-			SetBoardValue(otherHalf.x, otherHalf.y, null);
-			Object.Destroy(part);
-			part = null;
-			otherHalf.part = null;
-		}
-		else
-		{
-			// split the pill since only half the pill is getting cleared
-			Split(false, blocksToClear);
-		}
-	}
-
-	public override void UpdateFallingSet(HashSet<Block>[] blocksToClear = null)
-	{
-		bool thisContainsTop = SearchSetsForBlock(blocksToClear, blockOnTop, true);
-		bool otherContainsTop = SearchSetsForBlock(blocksToClear, otherHalf.blockOnTop, true);
-		Debug.Log($"{Time.time}: {x}, {y} color: {GetColor} type: {GetType()} length: {Block.fallingBlocks.Count}");
-		fallingBlocks.Add(this);
-
-		if (blockOnTop != null && !thisContainsTop)
-		{
-			Debug.Log(blockOnTop.x + " THIS" + blockOnTop.y + " " + blockOnTop.GetType() + " " + x + " " + y + " " + GetType());
-			blockOnTop.UpdateFallingSet(blocksToClear);
-		}
-
-		if (otherHalf.blockOnTop != null && !otherContainsTop)
-		{
-			Debug.Log(otherHalf.blockOnTop.x + " OTHER" + otherHalf.blockOnTop.y + " " + otherHalf.blockOnTop.GetType() + " " + otherHalf.x + " " + otherHalf.y + " " + otherHalf.GetType());
-			otherHalf.blockOnTop.UpdateFallingSet(blocksToClear);
-		}
-	}
-	// overridden from block class, checks the other half of the pill when falling as well
-	public override bool Fall(out bool doNotCheck)
-	{
-		int otherX = otherHalf.x;
-		int otherY = otherHalf.y;
-
-		// ensure both instances of y will 
-		if (y > 0 && (gameBoard[x, y - 1] == null || gameBoard[x, y - 1] == otherHalf)
-			&& otherY > 0 && (gameBoard[otherX, otherY - 1] == null || gameBoard[otherX, otherY - 1] == this))
-		{
-			// lower both halves
-			SetBoardValue(x, y, null);
-			SetBoardValue(otherX, otherY, null);
-
-			y--;
-			otherY--;
-			otherHalf.y = otherY;
-
-			SetBoardValue(x, y, this);
-			SetBoardValue(otherX, otherY, otherHalf);
-
-			// only need to lower the part once since it is the whole pill
-			part.transform.position += Vector3.down;
-
-			doNotCheck = false;
-			return false;
-		}
-		else
-		{
-			// disable control of pill
-			part.GetComponent<PillControl>().enabled = false;
-			currentPillLeftHalf = null;
-			
-			// if half the pill is resting above the board, split the pill so only the half in the board remains
-			if (y == 16)
-			{
-				doNotCheck = true;
-				Split(false);
-			}
-			else if (otherHalf.y == 16)
-			{
-				Split(true);
-				doNotCheck = true;
-			}
-			else
-			{
-				// update the current half and the block below's references
-				if (y > 0 && gameBoard[x, y - 1] != null && gameBoard[x, y - 1] != otherHalf)
-				{
-					blockBelow = gameBoard[x, y - 1];
-					blockBelow.blockOnTop = this;
-				}
-				else if (blockBelow != null)
-				{
-					blockBelow.blockOnTop = null;
-					blockBelow = null;
-				}
-
-				// update the other half and the block below's references
-				if (otherY > 0 && gameBoard[otherX, otherY - 1] != null && gameBoard[otherX, otherY - 1] != this)
-				{
-					otherHalf.blockBelow = gameBoard[otherX, otherY - 1];
-					otherHalf.blockBelow.blockOnTop = otherHalf;
-				}
-				else if (otherHalf.blockBelow != null)
-				{
-					otherHalf.blockBelow.blockOnTop = null;
-					otherHalf.blockBelow = null;
-				}
-				doNotCheck = false;
-			}
-			return true;
-		}
-	}
-	// overridden, adds the matches of the other half only if they contain a different set of values
-	public override void CheckMatchesToClear()
-	{
-		SameColorInARow(out HashSet<Block> thisHorizontalMatches, out HashSet<Block> thisVerticalMatches);
-		otherHalf.SameColorInARow(out HashSet<Block> otherHorizontalMatches, 
-			out HashSet<Block> otherVerticalMatches);
-
-		// minimum size is 2, one horizontal and vertical set
-		int currentSize = 2;
-
-		// increment the size if the sets aren't equal, they can be equal if both sides of the pill are part of a single 4+ in a row match
-		if (!thisHorizontalMatches.SetEquals(otherHorizontalMatches))
-			currentSize++;
-
-		if (!thisVerticalMatches.SetEquals(otherVerticalMatches))
-			currentSize++;
-		
-		// create the array with the desired size
-		HashSet<Block>[] allMatches = new HashSet<Block>[currentSize];
-		
-		allMatches[0] = thisHorizontalMatches;
-		allMatches[1] = thisVerticalMatches;
-
-		// the index of the next sets if they can be added
-		int currentIndex = 2;
-
-		// only add the sets if they are different, increment the index if it is added
-		if (!thisHorizontalMatches.SetEquals(otherHorizontalMatches))
-		{
-			allMatches[currentIndex] = otherHorizontalMatches;
-			currentIndex++;
-		}
-
-		if (!thisVerticalMatches.SetEquals(otherVerticalMatches))
-		{
-			allMatches[currentIndex] = otherVerticalMatches;
-		}
-		// send the sets to clear the ones large enough
-		ClearBlocks(allMatches);
+		// ensure the block is still in the list
+		stillFalling.Add(newBlock);
 	}
 	// ensure when moving in the specified direction (-1 or 1) that there is nothing in the way
 	public void ShiftHorizontally(int direction)
@@ -353,14 +183,127 @@ public class PillHalf : Block
 			part.transform.position += positionOffset;
 		}
 	}
+	// overridden, split the pill if only one half is going to be cleared; otherwise, destroy the entire pill
+	public override void Clear(HashSet<Block> blocksToClear)
+	{
+		// the other half of the pill may have already cleared, if so skip the rest as the pill should already be destroyed
+		if (part == null)
+			return;
+		
+		// true if the other half is going to cleared as well
+		bool containsOtherHalf = blocksToClear.Contains(otherHalf);
 
+		// since the other half is going to be cleared, destroy the whole pill
+		if (containsOtherHalf)
+		{
+			DestroyBlock();
+			otherHalf.DestroyBlock();
+		}
+		else
+		{
+			// split the pill since only half the pill is getting cleared
+			Split(false);
+		}
+	}
+	// overridden from block class, checks the other half of the pill when falling as well
+	public override bool Fall(out bool doNotCheck)
+	{
+		// skip checking since only the left needs to fall to lower the whole pill
+		if (!isLeftHalf)
+		{
+			doNotCheck = false;
+			return false;
+		}
+
+		int otherX = otherHalf.x;
+		int otherY = otherHalf.y;
+
+		// ensure both instances of y will be within the board and have no blocks underneath that aren't the other half
+		if (y > 0 && (gameBoard[x, y - 1] == null || gameBoard[x, y - 1] == otherHalf)
+			&& otherY > 0 && (gameBoard[otherX, otherY - 1] == null || gameBoard[otherX, otherY - 1] == this))
+		{
+			timesRestedOnSomething = 0;
+
+			// lower both halves
+			SetBoardValue(x, y, null);
+			SetBoardValue(otherX, otherY, null);
+
+			y--;
+			otherY--;
+			otherHalf.y = otherY;
+
+			SetBoardValue(x, y, this);
+			SetBoardValue(otherX, otherY, otherHalf);
+
+			// only need to lower the part once since it is the whole pill
+			part.transform.position += Vector3.down;
+
+			doNotCheck = false;
+			return true;
+		}
+
+		timesRestedOnSomething++;
+
+		// if the current pill is in control, allow some leeway for moving the pill after landing by allowing an extra time interval before stopping
+		if (timesRestedOnSomething < 2 && currentPillLeftHalf == this)
+		{
+			doNotCheck = false;
+			return true;
+		}
+		
+		// disable control of pill
+		part.GetComponent<PillControl>().enabled = false;
+		currentPillLeftHalf = null;
+		
+		// if half the pill is resting above the board, split the pill so only the half in the board remains
+		if (y == 16)
+		{
+			doNotCheck = true;
+			Split(false);
+		}
+		else if (otherHalf.y == 16)
+		{
+			Split(true);
+			doNotCheck = true;
+		}
+		else
+		{
+			doNotCheck = false;
+		}
+		return false;
+	}
+	// overridden, adds the matches of the other half AS WELL
+	public override HashSet<Block> CheckMatchesToClear()
+	{
+		SameColorInARow(out HashSet<Block> thisHorizontalMatches, out HashSet<Block> thisVerticalMatches);
+		otherHalf.SameColorInARow(out HashSet<Block> otherHorizontalMatches, 
+			out HashSet<Block> otherVerticalMatches);
+
+		HashSet<Block> matches = new();
+		
+		// only add the sets if they are large enough to be cleared
+		if (thisHorizontalMatches.Count >= 4)
+			matches.UnionWith(thisHorizontalMatches);
+		if (thisVerticalMatches.Count >= 4)
+			matches.UnionWith(thisVerticalMatches);
+
+		if (otherHorizontalMatches.Count >= 4)
+			matches.UnionWith(otherHorizontalMatches);
+		if (otherVerticalMatches.Count >= 4)
+			matches.UnionWith(otherVerticalMatches);
+
+		return matches;
+	}
 	// constructor ensures the proper renderer is set with the desired color
-	public PillHalf(GameObject part, Color color, int x, int y, bool leftSide)
+	public PillHalf(GameObject part, Color color, int x, int y, bool isLeftSide)
 		: base(part, color, x, y)
 	{
+		this.isLeftHalf = isLeftSide;
 		// the part is the whole pill while the renderer is just of one half
-		meshRenderer = part.transform.Find("Pill" + (leftSide ? "Left" : "Right")).GetComponent<MeshRenderer>();
+		meshRenderer = part.transform.Find("Pill" + (isLeftSide ? "Left" : "Right")).GetComponent<MeshRenderer>();
 		SetColor(color);
+
+		timesRestedOnSomething = 0;
 
 		// all start with an angle of 0
 		angle = 0;

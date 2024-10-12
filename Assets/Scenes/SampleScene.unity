@@ -1002,8 +1002,8 @@ MonoBehaviour:
   blockFolder: {fileID: 285201010}
   scoreTMP: {fileID: 531044997}
   virusCountTMP: {fileID: 1112935987}
-  gravityInterval: 1
-  downHeldGravityInterval: 0.05
+  gravityInterval: 0.65
+  downHeldGravityInterval: 0.03333334
 --- !u!4 &990973570
 Transform:
   m_ObjectHideFlags: 0
