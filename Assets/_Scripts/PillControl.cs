@@ -22,7 +22,7 @@ public class PillControl : MonoBehaviour
 	private int timesMovedInARow = 0;
 
 	// current instance of the game manager
-	GameManager gameManager;
+	private GameManager gameManager;
 
 	void Start()
 	{

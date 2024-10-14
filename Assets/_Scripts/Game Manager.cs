@@ -40,50 +40,15 @@ public class GameManager : MonoBehaviour
 	// the blocks that need to be checked for new matches after all blocks stop falling
 	private HashSet<Block> blocksToCheck;
 
+	// true after blocks were cleared to check if anything needs to fall
 	private bool tryMakingBlocksFallAgain = false;
 
-	// TODO: move to virus class
-	// insert a virus at the specified position and possibly the specified color
-	private void InsertVirus(int x, int y, Block.Color color)
-	{
-		GameObject virusObject = Instantiate(virusPrefab, blockFolder.transform);
-
-		// the new instance of the virus
-		Virus virus = new(virusObject, color, x, y);
-
-		// get the matching horizontal and vertical blocks
-		virus.SameColorInARow(out HashSet<Block> horizontalMatches, out HashSet<Block> verticalMatches);
-		
-		// the possible colors remaining
-		List<Block.Color> possibleColors = new() 
-		{ 
-			Block.Color.Red, 
-			Block.Color.Yellow,
-			Block.Color.Blue,
-		};
-
-		possibleColors.Remove(color);
-
-		// if more than 2 blocks (viruses only at the start) are in a row, change the color to avoid generation that is too easy
-		while (possibleColors.Count > 0 && (horizontalMatches.Count > 2 || verticalMatches.Count > 2))
-		{
-			// randomly select a different color
-			int colorIndex = Random.Range(0, possibleColors.Count);
-			Block.Color newColor = possibleColors.ElementAt(colorIndex);
-
-			virus.ChangeColor(newColor);
-			
-			// check the matching parts again as it is technically possible for multiple colors to match at this position
-			virus.SameColorInARow(out horizontalMatches, out verticalMatches);
-			possibleColors.RemoveAt(colorIndex);
-		}
-	}
-
+	// update the UI to scow the new score
 	public void UpdateScore(int score)
 	{
 		scoreTMP.text = $"Score: {score}";
 	}
-
+	// update the UI to show the new virus count
 	public void UpdateVirusCount(int virusCount)
 	{
 		virusCountTMP.text = $"Viruses: {virusCount}";
@@ -122,7 +87,7 @@ public class GameManager : MonoBehaviour
 			Block.Color color = possibleColors.ElementAt(colorIndex);
 
 			// place the virus
-			InsertVirus((int)chosenPosition.x, (int)chosenPosition.y, color);
+			Virus.InsertVirus((int)chosenPosition.x, (int)chosenPosition.y, color);
 
 			// remove the position from the list of available positions since a virus is now there
 			possibleVirusSpots.RemoveAt(positionIndex);
@@ -131,23 +96,23 @@ public class GameManager : MonoBehaviour
 	// simply generates viruses in a way to easily test certain edge cases with rotating
 	private void GenerateRotateTestLevel()
 	{
-		InsertVirus(1, 0, Block.Color.Red);
-		InsertVirus(1, 1, Block.Color.Red);
-		InsertVirus(1, 2, Block.Color.Red);
-		InsertVirus(1, 3, Block.Color.Red);
-		InsertVirus(3, 1, Block.Color.Red);
-		InsertVirus(3, 3, Block.Color.Red);
-		InsertVirus(4, 0, Block.Color.Red);
-		InsertVirus(4, 4, Block.Color.Red);
-		InsertVirus(5, 1, Block.Color.Red);
-		InsertVirus(5, 3, Block.Color.Red);
+		Virus.InsertVirus(1, 0, Block.Color.Red);
+		Virus.InsertVirus(1, 1, Block.Color.Red);
+		Virus.InsertVirus(1, 2, Block.Color.Red);
+		Virus.InsertVirus(1, 3, Block.Color.Red);
+		Virus.InsertVirus(3, 1, Block.Color.Red);
+		Virus.InsertVirus(3, 3, Block.Color.Red);
+		Virus.InsertVirus(4, 0, Block.Color.Red);
+		Virus.InsertVirus(4, 4, Block.Color.Red);
+		Virus.InsertVirus(5, 1, Block.Color.Red);
+		Virus.InsertVirus(5, 3, Block.Color.Red);
 
-		InsertVirus(2, 8, Block.Color.Red);
-		InsertVirus(2, 10, Block.Color.Red);
-		InsertVirus(3, 8, Block.Color.Red);
-		InsertVirus(3, 11, Block.Color.Red);
-		InsertVirus(4, 8, Block.Color.Red);
-		InsertVirus(4, 10, Block.Color.Red);
+		Virus.InsertVirus(2, 8, Block.Color.Red);
+		Virus.InsertVirus(2, 10, Block.Color.Red);
+		Virus.InsertVirus(3, 8, Block.Color.Red);
+		Virus.InsertVirus(3, 11, Block.Color.Red);
+		Virus.InsertVirus(4, 8, Block.Color.Red);
+		Virus.InsertVirus(4, 10, Block.Color.Red);
 	}
 	// for outside calls, allow moving the current pill from the pill control script
 	public void MoveCurrentPillHorizontally(int direction)
@@ -170,7 +135,7 @@ public class GameManager : MonoBehaviour
 	{
 		// randomly generate a seed for the rng so bugs can be replicated easier by setting the seed manually
 		int seed = Random.Range(1, 100000);
-		//seed = 2;
+		seed = 2;
 		Debug.Log($"The seed is: {seed}");
 
 		Random.InitState(seed);
@@ -182,6 +147,7 @@ public class GameManager : MonoBehaviour
 		Block.blockPrefab = this.blockPrefab;
 		Block.stillFalling = new();
 		Block.blocksThatMayFall = new();
+		Virus.virusPrefab = virusPrefab;
 		PillHalf.pillPrefab = this.pillPrefab;
 		blocksToCheck = new();
 		RandomlyGenerateViruses();
@@ -246,38 +212,56 @@ public class GameManager : MonoBehaviour
 			}
 			else
 			{
+				// a copy of the reference is made because if the pill is split from being partly above the board the original is set to null
+				PillHalf currentPillLeftHalf = PillHalf.currentPillLeftHalf;
+
 				// only need to check the pill in control if it still is in control to make it fall
-				if (PillHalf.currentPillLeftHalf != null)
+				if (currentPillLeftHalf != null)
 				{
-					if (PillHalf.currentPillLeftHalf.Fall(out bool doNotCheck))
+					if (currentPillLeftHalf.Fall(out bool doNotCheck, out bool removeFromBlocksThatMayFall))
 					{
-						Block.stillFalling.Add(PillHalf.currentPillLeftHalf);
+						Block.stillFalling.Add(currentPillLeftHalf);
 					}
-					else if (Block.stillFalling.Contains(PillHalf.currentPillLeftHalf))
+					else if (Block.stillFalling.Contains(currentPillLeftHalf))
 					{
 						/* if the pill stopped falling, remove it from the list and add it to the checking list if it needs to be checked
 						   it does not need to be checked if it is places halfway above the game board as the pill gets destroyed and
 						   replaced with a normal block */
-						Block.stillFalling.Remove(PillHalf.currentPillLeftHalf);
+						Block.stillFalling.Remove(currentPillLeftHalf);
 
 						if (!doNotCheck)
-							blocksToCheck.Add(PillHalf.currentPillLeftHalf);
+							blocksToCheck.Add(currentPillLeftHalf);
 					}
+					// remove from set since pill reached the bottom of the board
+					if (removeFromBlocksThatMayFall)
+						Block.blocksThatMayFall.Remove(currentPillLeftHalf);
 				}
 				else
 				{
+					HashSet<Block> blocksToRemoveFromMayFall = new();
+					// iterate through all blocks that could possibly fall (does not include viruses and blocks at the bottom)
 					foreach (Block block in Block.blocksThatMayFall)
 					{
-						if (block.Fall(out bool _))
+						// add blocks to the set if they fell this interval
+						if (block.Fall(out bool _, out bool removeFromBlocksThatMayFall))
 						{
 							Block.stillFalling.Add(block);
 						}
 						else if (Block.stillFalling.Contains(block))
 						{
+							// if the block stopped falling, remove it from the still falling set
 							Block.stillFalling.Remove(block);
+
+							// add the block to this set to later check it for matches
 							blocksToCheck.Add(block);
 						}
+						// add block to the set to remove it since it fell to the bottom of the board
+						if (removeFromBlocksThatMayFall)
+							blocksToRemoveFromMayFall.Add(block);
 					}
+					// remove the blocks from the set since they reached the bottom
+					foreach (Block block in blocksToRemoveFromMayFall)
+						Block.blocksThatMayFall.Remove(block);
 				}
 				tryMakingBlocksFallAgain = false;
 			}

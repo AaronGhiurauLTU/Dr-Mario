@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using Unity.Properties;
 using UnityEngine;
 
@@ -8,6 +9,7 @@ using UnityEngine;
    and decrements the remaining virus counter when destroyed */
 public class Virus : Block
 {
+	public static GameObject virusPrefab;
 	private static int virusesRemaining = 0;
 	private static int currentPointGain = 100;
 
@@ -19,13 +21,6 @@ public class Virus : Block
 	public void ChangeColor(Color color)
 	{
 		SetColor(color);
-	}
-
-	// do nothing as viruses never fall
-	public override bool Fall(out bool doNotCheck) 
-	{ 
-		doNotCheck = false;
-		return false;
 	}
 	// update score and virus count appropriately
 	public override void Clear(HashSet<Block> blocksToClear)
@@ -41,8 +36,44 @@ public class Virus : Block
 		// for every virus cleared in one turn, the score gained per virus doubles
 		currentPointGain *= 2;
 	}
-	// this constructor ensures the mesh renderer is properly set and updates the virus count
-	public Virus(GameObject part, Color color, int x, int y) : base(part, color, x, y)
+
+	// insert a virus at the specified position and possibly the specified color, use this instead of a constructor
+	public static void InsertVirus(int x, int y, Color color)
+	{
+		GameObject virusObject = Object.Instantiate(virusPrefab, blockFolder.transform);
+
+		// the new instance of the virus
+		Virus virus = new(virusObject, color, x, y);
+
+		// get the matching horizontal and vertical blocks
+		virus.SameColorInARow(out HashSet<Block> horizontalMatches, out HashSet<Block> verticalMatches);
+
+		// the possible colors remaining
+		List<Color> possibleColors = new()
+		{
+			Color.Red,
+			Color.Yellow,
+			Color.Blue,
+		};
+
+		possibleColors.Remove(color);
+
+		// if more than 2 blocks (viruses only at the start) are in a row, change the color to avoid generation that is too easy
+		while (possibleColors.Count > 0 && (horizontalMatches.Count > 2 || verticalMatches.Count > 2))
+		{
+			// randomly select a different color
+			int colorIndex = Random.Range(0, possibleColors.Count);
+			Color newColor = possibleColors.ElementAt(colorIndex);
+
+			virus.ChangeColor(newColor);
+
+			// check the matching parts again as it is technically possible for multiple colors to match at this position
+			virus.SameColorInARow(out horizontalMatches, out verticalMatches);
+			possibleColors.RemoveAt(colorIndex);
+		}
+	}
+	// this constructor ensures the mesh renderer is properly set and updates the virus count, private since InsertVirus is used instead
+	private Virus(GameObject part, Color color, int x, int y) : base(part, color, x, y)
 	{
 		meshRenderer = part.transform.Find("Cube").GetComponent<MeshRenderer>();
 		SetColor(color);

@@ -178,9 +178,10 @@ public class Block
 	}
 	/* overridable, falls until it reaches the bottom or a block is directly below it and returns true if it fell
 	   the out variable is false in most cases, but is true when the block should not be checked for matches (pills splitting) */
-	public virtual bool Fall(out bool doNotCheck)
+	public virtual bool Fall(out bool doNotCheck, out bool removeFromBlocksThatMayFall)
 	{
 		doNotCheck = false;
+		removeFromBlocksThatMayFall = false;
 		// check if it has room to fall down
 		if (y > 0 && gameBoard[x, y - 1] == null)
 		{
@@ -197,6 +198,10 @@ public class Block
 		}
 		else
 		{
+			if (y == 0)
+				removeFromBlocksThatMayFall = true;
+				
+
 			return false;
 		}
 	}

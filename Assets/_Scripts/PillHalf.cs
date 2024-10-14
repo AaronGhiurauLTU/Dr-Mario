@@ -206,14 +206,13 @@ public class PillHalf : Block
 		}
 	}
 	// overridden from block class, checks the other half of the pill when falling as well
-	public override bool Fall(out bool doNotCheck)
+	public override bool Fall(out bool doNotCheck, out bool removeFromBlocksThatMayFall)
 	{
+		doNotCheck = false;
+		removeFromBlocksThatMayFall = false;
 		// skip checking since only the left needs to fall to lower the whole pill
 		if (!isLeftHalf)
-		{
-			doNotCheck = false;
 			return false;
-		}
 
 		int otherX = otherHalf.x;
 		int otherY = otherHalf.y;
@@ -238,7 +237,6 @@ public class PillHalf : Block
 			// only need to lower the part once since it is the whole pill
 			part.transform.position += Vector3.down;
 
-			doNotCheck = false;
 			return true;
 		}
 
@@ -247,7 +245,6 @@ public class PillHalf : Block
 		// if the current pill is in control, allow some leeway for moving the pill after landing by allowing an extra time interval before stopping
 		if (timesRestedOnSomething < 2 && currentPillLeftHalf == this)
 		{
-			doNotCheck = false;
 			return true;
 		}
 		
@@ -263,12 +260,13 @@ public class PillHalf : Block
 		}
 		else if (otherHalf.y == 16)
 		{
-			Split(true);
 			doNotCheck = true;
+			Split(true);
 		}
 		else
 		{
-			doNotCheck = false;
+			if (y == 0 || otherHalf.y == 0)
+				removeFromBlocksThatMayFall = true;
 		}
 		return false;
 	}
