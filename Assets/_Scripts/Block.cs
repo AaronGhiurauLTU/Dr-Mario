@@ -1,24 +1,23 @@
-using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
-using UnityEditor.Experimental.GraphView;
+using Unity.VisualScripting;
 using UnityEngine;
 
 
 // stores information about the position and color while providing methods to check for matching adjacent blocks
 public class Block
 {
+	public static readonly int boardSizeX = 8;
+	public static readonly int boardSizeY = 16;
+
 	// stores the blocks at each position in this 2D array, shared across all instances of this class
-	public static Block[,] gameBoard;
+	public static readonly Block[,] gameBoard = new Block[boardSizeX, boardSizeY];
 	
 	// current score of player
 	protected static int score;
 
-	// this set contains all blocks that are able to fall at some point (everything but viruses)
-	public static HashSet<Block> blocksThatMayFall;
-
 	// this set contains all blocks that have fallen during the last gravity interval
-	public static HashSet<Block> stillFalling;
+	public static readonly HashSet<Block> stillFalling = new();
 
 	// the game object that new blocks are placed in
 	public static GameObject blockFolder;
@@ -28,6 +27,13 @@ public class Block
 
 	// the current instance of the game manager script
 	public static GameManager gameManager;
+
+	// the possible colors that a garbage block or pill half can be
+	public static readonly List<Color> blockColorList = new() {
+		Color.Red,
+		Color.Yellow,
+		Color.Blue,
+	};
 
 	// the possible colors a block can be
 	public enum Color
@@ -54,11 +60,76 @@ public class Block
 	{
 		get { return color; }
 	}
-	// because the top of a pill is allowed to be over the game board, only set the value if the y value is within the board
+	// get a random color without removing the selected color from the list (drawing with replacement)
+	public static Color GetRandomColor(List<Color> colorList)
+	{
+		int index = Random.Range(0, colorList.Count);
+		Color selectedColor = colorList.ElementAt(index);
+
+		return selectedColor;
+	}
+	// get a random color and remove all instances of the selected color (drawing without replacement)
+	public static Color GetRandomColor(ref List<Color> colorList)
+	{
+		Color selectedColor = GetRandomColor(colorList);
+
+		// remove every instance as the virus list has duplicated to have weights for certain colors
+		colorList.RemoveAll(item => item == selectedColor);
+
+		return selectedColor;
+	}
+	// spawn the specified amount of garbage blocks at one time
+	public static void SpawnGarbageBlocks(int garbageCount)
+	{
+		// the available x positions for the garbage blocks
+		List<int> availableHorizontalPositions = new() { 0, 1, 2, 3, 4, 5, 6, 7 };
+
+		// each iteration of the loop spawns a block
+		for (int i = 0; i < garbageCount; i++)
+		{
+			// randomly select an x position and retry if the spot was not empty
+			int xValue;
+			do
+			{
+				int index = Random.Range(0, availableHorizontalPositions.Count);
+
+				xValue = availableHorizontalPositions.ElementAt(index);
+
+				availableHorizontalPositions.Remove(xValue);
+			} 
+			while (gameBoard[xValue, boardSizeY - 1] != null && availableHorizontalPositions.Count > 0);
+
+			// if it exited the loop with an xValue that does not point to an empty spot, don't attempt to spawn any more garbage
+			if (gameBoard[xValue, boardSizeY - 1] != null)
+				return;
+
+			// create a new block
+			GameObject newBlockObj = Object.Instantiate(blockPrefab, blockFolder.transform);
+
+			Block newBlock = new(newBlockObj, GetRandomColor(blockColorList), xValue, boardSizeY - 1);
+			stillFalling.Add(newBlock);
+		}
+	}
+	// ensure the block is within the board before trying to set the value of the 2D array
 	public void SetBoardValue(int x, int y, Block value)
 	{
-		if (y < 16)
+		if (x >= 0 && x < boardSizeX && y >= 0 && y < boardSizeY)
 			gameBoard[x, y] = value;
+	}
+	// returns the value at the position in the board and null if it is outside the board
+	public Block GetBoardValue(int x, int y, out bool outOfBounds)
+	{
+		outOfBounds = !IsWithinBounds(x, y);
+		// the overridden within bounds function allows y = boardSizeY so double check the y value to return the board value
+		if (!outOfBounds && y < boardSizeY)
+			return gameBoard[x, y];
+		
+		return null;
+	}
+	// returns true if the specified values are within the bounds of the board, overridden for pill to allow going halfway over the board
+	public virtual bool IsWithinBounds(int x, int y)
+	{
+		return x >= 0 && x < boardSizeX && y >= 0 && y < boardSizeY;
 	}
 	/* get the horizontal and vertical set of matches and forward them to the clear blocks method to determine which ones are large enough
 	   this method gets overridden in the pill half, returns all matches that were large enough to be cleared */
@@ -77,11 +148,29 @@ public class Block
 		return matches;
 	}
 	// destroy the current block, parameter is simply for helper functions, particularly in overridden versions of this method
-	public virtual void Clear(HashSet<Block> blocksToClear)
+	public virtual void Clear(HashSet<Block> blocksToClear, out int garbageCount)
 	{
+		garbageCount = 0;
 		DestroyBlock();
 	}
-	// destroy the block, ensuring it is not in the game board and in the blocks that may fall set
+	// move the block to the new position, overridden by pill class to handle other half, returns true if successfully moved
+	protected virtual bool TryMove(int newX, int newY)
+	{
+		if (GetBoardValue(newX, newY, out bool outOfBounds) == null && !outOfBounds)
+		{
+			SetBoardValue(x, y, null);
+
+			x = newX;
+			y = newY;
+			
+			SetBoardValue(x , y, this);
+			part.transform.position = new(x, y, 0);
+
+			return true;
+		}
+		return false;
+	}
+	// destroy the block, ensuring it is not in the game board
 	protected void DestroyBlock()
 	{
 		SetBoardValue(x, y, null);
@@ -90,7 +179,6 @@ public class Block
 			Object.Destroy(part);
 
 		part = null;
-		blocksThatMayFall.Remove(this);
 	}
 	// the out variables are sets of all the positions of the same color in a row horizontally or vertically
 	public void SameColorInARow(out HashSet<Block> horizontalMatches, out HashSet<Block> verticalMatches)
@@ -129,12 +217,12 @@ public class Block
 		int currentY = (int)currentCoordinate.y;
 
 		// loop until the edge of the game board is reached
-		while (currentX >= 0 && currentX < 8 && currentY >= 0 && currentY < 16)
+		while (IsWithinBounds(currentX, currentY) && currentY < boardSizeY)
 		{
 			Block checkingBlock = gameBoard[currentX, currentY];
 
-			// if a block is there and it has the same color as the root, add this part to the return set
-			if (checkingBlock != null && checkingBlock.GetColor == color)
+			// if a block is there and it has the same color as the root or is grey (custom mechanic), add this part to the return set
+			if (checkingBlock != null && (checkingBlock.GetColor == color || checkingBlock.GetColor == Color.Grey))
 			{
 				matches.Add(checkingBlock);
 			}
@@ -178,32 +266,17 @@ public class Block
 	}
 	/* overridable, falls until it reaches the bottom or a block is directly below it and returns true if it fell
 	   the out variable is false in most cases, but is true when the block should not be checked for matches (pills splitting) */
-	public virtual bool Fall(out bool doNotCheck, out bool removeFromBlocksThatMayFall)
+	public virtual bool TryToFall(out bool doNotCheck)
 	{
 		doNotCheck = false;
-		removeFromBlocksThatMayFall = false;
+
 		// check if it has room to fall down
-		if (y > 0 && gameBoard[x, y - 1] == null)
+		if (TryMove(x, y - 1))
 		{
-			// lower block by one
-			gameBoard[x, y] = null;
-
-			y--;
-
-			gameBoard[x, y] = this;
-
-			part.transform.position += Vector3.down;
-
 			return true;
 		}
-		else
-		{
-			if (y == 0)
-				removeFromBlocksThatMayFall = true;
-				
 
-			return false;
-		}
+		return false;
 	}
 	// constructor, initialize the proper variables and set the color of the block
 	public Block(GameObject part, Color color, int x, int y)
@@ -212,12 +285,10 @@ public class Block
 		this.x = x;
 		this.y = y;
 
-		gameBoard[x, y] = this;
+		SetBoardValue(x, y, this);
+
 		part.transform.position = new(x, y, 0);
 		meshRenderer = part.GetComponent<MeshRenderer>();
 		SetColor(color);
-
-		blocksThatMayFall.Add(this);
 	}
 }
-

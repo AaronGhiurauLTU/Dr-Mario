@@ -10,9 +10,24 @@ using UnityEngine;
 public class Virus : Block
 {
 	public static GameObject virusPrefab;
+
+	// the amount of viruses left to destroy
 	private static int virusesRemaining = 0;
+
+	// the amount of points gained per virus clear, increases as more viruses are cleared in a single clear
 	private static int currentPointGain = 100;
 
+	// the possible colors a virus can be, duplicates are to give more weight to the 3 main colors
+	public static readonly List<Color> virusColorList = new() {
+		Color.Red,
+		Color.Red,
+		Color.Yellow,
+		Color.Yellow,
+		Color.Blue,
+		Color.Blue,
+		Color.Grey
+	};
+	// reset the point gain for the next turn
 	public static void ResetBonusPointGain()
 	{
 		currentPointGain = 100;
@@ -23,8 +38,9 @@ public class Virus : Block
 		SetColor(color);
 	}
 	// update score and virus count appropriately
-	public override void Clear(HashSet<Block> blocksToClear)
+	public override void Clear(HashSet<Block> blocksToClear, out int garbageCount)
 	{
+		garbageCount = 0;
 		DestroyBlock();
 
 		virusesRemaining--;
@@ -35,6 +51,16 @@ public class Virus : Block
 
 		// for every virus cleared in one turn, the score gained per virus doubles
 		currentPointGain *= 2;
+
+		// spawn 1-3 garbage blocks for custom mechanic
+		if (color == Color.Grey)
+			garbageCount = Random.Range(1, 4);
+	}
+	// do nothing since viruses cannot fall
+	public override bool TryToFall(out bool doNotCheck)
+	{
+		doNotCheck = false;
+		return false;
 	}
 
 	// insert a virus at the specified position and possibly the specified color, use this instead of a constructor
@@ -48,28 +74,21 @@ public class Virus : Block
 		// get the matching horizontal and vertical blocks
 		virus.SameColorInARow(out HashSet<Block> horizontalMatches, out HashSet<Block> verticalMatches);
 
-		// the possible colors remaining
-		List<Color> possibleColors = new()
-		{
-			Color.Red,
-			Color.Yellow,
-			Color.Blue,
-		};
+		List<Color> possibleColors = new(virusColorList);
 
-		possibleColors.Remove(color);
+		// remove all occurrences of the chosen color from the list
+		possibleColors.RemoveAll(item => item == color);
 
 		// if more than 2 blocks (viruses only at the start) are in a row, change the color to avoid generation that is too easy
 		while (possibleColors.Count > 0 && (horizontalMatches.Count > 2 || verticalMatches.Count > 2))
 		{
 			// randomly select a different color
-			int colorIndex = Random.Range(0, possibleColors.Count);
-			Color newColor = possibleColors.ElementAt(colorIndex);
+			Color newColor =  GetRandomColor(ref possibleColors);
 
 			virus.ChangeColor(newColor);
 
 			// check the matching parts again as it is technically possible for multiple colors to match at this position
 			virus.SameColorInARow(out horizontalMatches, out verticalMatches);
-			possibleColors.RemoveAt(colorIndex);
 		}
 	}
 	// this constructor ensures the mesh renderer is properly set and updates the virus count, private since InsertVirus is used instead
@@ -81,8 +100,5 @@ public class Virus : Block
 		// update virus count
 		virusesRemaining++;
 		gameManager.UpdateVirusCount(virusesRemaining);
-
-		// base constructor adds this to the set so remove it since viruses never fall
-		blocksThatMayFall.Remove(this);
 	}
 }

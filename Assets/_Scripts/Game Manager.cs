@@ -2,7 +2,6 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using TMPro;
-using UnityEditor.Experimental.GraphView;
 using UnityEngine;
 
 // uses the block class (Block.cs) and derived classes of it (Virus.cs and PillHalf.cs)
@@ -23,13 +22,16 @@ public class GameManager : MonoBehaviour
 		blockFolder;
 
 	public TextMeshProUGUI scoreTMP,
-		virusCountTMP;
+		virusCountTMP,
+		gameEndTMP;
 
 	// in seconds, the amount of time between updating falling objects
 	public float gravityInterval;
 
 	// the sped up interval that pills move down at while the down button is held
 	public float downHeldGravityInterval;
+
+	private bool gameEnded = false;
 
 	// true when down is held and false otherwise
 	private bool downHeld = false;
@@ -43,6 +45,8 @@ public class GameManager : MonoBehaviour
 	// true after blocks were cleared to check if anything needs to fall
 	private bool tryMakingBlocksFallAgain = false;
 
+	private readonly Queue<int> queuedGarbage = new();
+
 	// update the UI to scow the new score
 	public void UpdateScore(int score)
 	{
@@ -52,8 +56,11 @@ public class GameManager : MonoBehaviour
 	public void UpdateVirusCount(int virusCount)
 	{
 		virusCountTMP.text = $"Viruses: {virusCount}";
-	}
 
+		if (virusCount == 0)
+			EndGame(false);
+	}
+	// generate the specified amount of viruses randomly through the board
 	private void RandomlyGenerateViruses()
 	{
 		// this list contains all available spots for a virus to generate
@@ -76,15 +83,8 @@ public class GameManager : MonoBehaviour
 			int positionIndex = Random.Range(0, possibleVirusSpots.Count);
 			Vector2 chosenPosition = possibleVirusSpots.ElementAt(positionIndex);
 
-			List<Block.Color> possibleColors = new() 
-			{ 
-				Block.Color.Red, 
-				Block.Color.Yellow,
-				Block.Color.Blue,
-			};
 			// randomly select a color for the virus
-			int colorIndex = Random.Range(0, possibleColors.Count);
-			Block.Color color = possibleColors.ElementAt(colorIndex);
+			Block.Color color = Block.GetRandomColor(Virus.virusColorList);
 
 			// place the virus
 			Virus.InsertVirus((int)chosenPosition.x, (int)chosenPosition.y, color);
@@ -122,41 +122,53 @@ public class GameManager : MonoBehaviour
 	// allow pill control script to rotate current pill
 	public void RotateCurrentPill()
 	{
-		PillHalf.currentPillLeftHalf.Rotate();
+		// no pill is in control when garbage blocks are dropping or when blocks that aren't the pill are falling
+		if (PillHalf.currentPillLeftHalf != null)
+			PillHalf.currentPillLeftHalf.Rotate();
 	}
-
+	public void EndGame(bool gameOver)
+	{
+		if (gameOver)
+		{
+			gameEndTMP.text = "Game Over!";
+		}
+		else
+		{
+			gameEndTMP.text = "Game Won!";
+		}
+		gameEndTMP.gameObject.SetActive(true);
+		gameEnded = true;
+	}
+	// called by pill control, set to true when down is held
 	public void DownHeld()
 	{
 		downHeld = true;
 	}
-
 	// Start is called before the first frame update
 	void Start()
 	{
 		// randomly generate a seed for the rng so bugs can be replicated easier by setting the seed manually
 		int seed = Random.Range(1, 100000);
-		seed = 2;
+		seed = 28028;
 		Debug.Log($"The seed is: {seed}");
 
 		Random.InitState(seed);
 
-		// initialize game board, lowest coordinate is (0, 0) and the highest is (7, 15)
-		Block.gameBoard = new Block[8, 16];
 		Block.gameManager = this;
 		Block.blockFolder = this.blockFolder;
 		Block.blockPrefab = this.blockPrefab;
-		Block.stillFalling = new();
-		Block.blocksThatMayFall = new();
 		Virus.virusPrefab = virusPrefab;
 		PillHalf.pillPrefab = this.pillPrefab;
 		blocksToCheck = new();
 		RandomlyGenerateViruses();
 		//GenerateRotateTestLevel();
 	}
-
 	// Update is called once per frame
 	void Update()
 	{
+		if (gameEnded)
+			return;
+
 		timeElapsedSinceUpdate += Time.deltaTime;
 
 		// if the down button is held, allow pills to fall faster
@@ -191,7 +203,10 @@ public class GameManager : MonoBehaviour
 
 						foreach (Block block in blocksToClear)
 						{
-							block.Clear(blocksToClear);
+							block.Clear(blocksToClear, out int garbageCount);
+
+							if (garbageCount > 0)
+								queuedGarbage.Enqueue(garbageCount);
 						}
 						// check for blocks that may need to fall after clearing these blocks
 						tryMakingBlocksFallAgain = true;
@@ -202,6 +217,11 @@ public class GameManager : MonoBehaviour
 					}
 					// empty the set since all these blocks were checked
 					blocksToCheck = new();
+				}
+				else if (queuedGarbage.Count > 0)
+				{
+					Block.SpawnGarbageBlocks(queuedGarbage.Dequeue());
+					tryMakingBlocksFallAgain = true;
 				}
 				else
 				{
@@ -218,7 +238,7 @@ public class GameManager : MonoBehaviour
 				// only need to check the pill in control if it still is in control to make it fall
 				if (currentPillLeftHalf != null)
 				{
-					if (currentPillLeftHalf.Fall(out bool doNotCheck, out bool removeFromBlocksThatMayFall))
+					if (currentPillLeftHalf.TryToFall(out bool doNotCheck))
 					{
 						Block.stillFalling.Add(currentPillLeftHalf);
 					}
@@ -232,36 +252,34 @@ public class GameManager : MonoBehaviour
 						if (!doNotCheck)
 							blocksToCheck.Add(currentPillLeftHalf);
 					}
-					// remove from set since pill reached the bottom of the board
-					if (removeFromBlocksThatMayFall)
-						Block.blocksThatMayFall.Remove(currentPillLeftHalf);
 				}
 				else
 				{
-					HashSet<Block> blocksToRemoveFromMayFall = new();
-					// iterate through all blocks that could possibly fall (does not include viruses and blocks at the bottom)
-					foreach (Block block in Block.blocksThatMayFall)
+					// iterate through every spot in the board and call the fall function of each block that exists
+					for (int x = 0; x < Block.boardSizeX; x++)
 					{
-						// add blocks to the set if they fell this interval
-						if (block.Fall(out bool _, out bool removeFromBlocksThatMayFall))
+						// it is important to start from the bottom and move upwards so the blocks above don't fall and "land" onto a falling block below
+						for (int y = 0; y < Block.boardSizeY; y++)
 						{
-							Block.stillFalling.Add(block);
-						}
-						else if (Block.stillFalling.Contains(block))
-						{
-							// if the block stopped falling, remove it from the still falling set
-							Block.stillFalling.Remove(block);
+							Block block = Block.gameBoard[x, y];
 
-							// add the block to this set to later check it for matches
-							blocksToCheck.Add(block);
+							if (block == null)
+								continue;
+								
+							if (block.TryToFall(out bool _))
+							{
+								Block.stillFalling.Add(block);
+							}
+							else if (Block.stillFalling.Contains(block))
+							{
+								// if the block stopped falling, remove it from the still falling set
+								Block.stillFalling.Remove(block);
+
+								// add the block to this set to later check it for matches
+								blocksToCheck.Add(block);
+							}
 						}
-						// add block to the set to remove it since it fell to the bottom of the board
-						if (removeFromBlocksThatMayFall)
-							blocksToRemoveFromMayFall.Add(block);
 					}
-					// remove the blocks from the set since they reached the bottom
-					foreach (Block block in blocksToRemoveFromMayFall)
-						Block.blocksThatMayFall.Remove(block);
 				}
 				tryMakingBlocksFallAgain = false;
 			}

@@ -1,8 +1,5 @@
 using System.Collections;
 using System.Collections.Generic;
-using System.Linq;
-using Unity.Properties;
-using UnityEditor.Experimental.GraphView;
 using UnityEngine;
 
 
@@ -16,7 +13,10 @@ public class PillHalf : Block
 	public static GameObject pillPrefab;
 
 	// the current pill that is in control
-	public static PillHalf currentPillLeftHalf;
+	public static PillHalf currentPillLeftHalf = null;
+
+	// the next pill queued to be given to the player
+	public static PillHalf nextPillLeftHalf = null;
 
 	// current rotation of pill (0, 90, 180, or 270 degrees) and not necessarily the same as the transform but exists for ease of reading
 	private int angle;
@@ -30,33 +30,46 @@ public class PillHalf : Block
 	// creates a new pill with random colors for each side
 	public static void SpawnNewPill()
 	{
+		// set the queued pill to the current one
+		currentPillLeftHalf = nextPillLeftHalf;
+
+		// create the next pill to be queued
 		GameObject newPillObj = Object.Instantiate(pillPrefab, blockFolder.transform);
 
-		// randomly select a color for each half, can be the same color for both
-		List<Color> possibleColors = new()
-			{
-				Color.Red,
-				Color.Yellow,
-				Color.Blue,
-			};
-		// randomly select a color for the virus
-		int colorIndex = Random.Range(0, possibleColors.Count);
+		// randomly select a color for each half, can be the same color for both, and place the pill outside the board to show it to the player
+		PillHalf rightHalf = new(newPillObj, GetRandomColor(blockColorList), 11, 15, false);
 
-		PillHalf rightHalf = new(newPillObj, possibleColors.ElementAt(colorIndex), 4, 15, false);
-
-		colorIndex = Random.Range(0, possibleColors.Count);
-		PillHalf leftHalf = new(newPillObj, possibleColors.ElementAt(colorIndex), 3, 15, true);
+		PillHalf leftHalf = new(newPillObj, GetRandomColor(blockColorList), 10, 15, true);
 
 		// ensure both halves have the instance of each other
 		leftHalf.otherHalf = rightHalf;
 		rightHalf.otherHalf = leftHalf;
 
-		currentPillLeftHalf = leftHalf;
+		nextPillLeftHalf = leftHalf;
 
-		// ensure the pill is in the list
-		stillFalling.Add(currentPillLeftHalf);
+		
+		if (currentPillLeftHalf == null)
+		{
+			// initially, there is no pill queued so recall this method to move the newly made queued pill to the current pill and queue a new pill
+			SpawnNewPill();
+		}
+		else
+		{
+			// move the queued pill to the game board
+			if (currentPillLeftHalf.TryMove(3, boardSizeY - 1))
+			{
+				// enable control of the current pill
+				currentPillLeftHalf.part.GetComponent<PillControl>().enabled = true;
+
+				// ensure the pill is in the falling set
+				stillFalling.Add(currentPillLeftHalf);
+			}
+			else
+			{
+				gameManager.EndGame(true);
+			}
+		}
 	}
-
 	// split the pill, destroying the entire pill and replacing the half that should be kept with a normal block
 	private void Split(bool destroyOther)
 	{
@@ -76,23 +89,9 @@ public class PillHalf : Block
 	// ensure when moving in the specified direction (-1 or 1) that there is nothing in the way
 	public void ShiftHorizontally(int direction)
 	{
-		if (x + direction >= 0 && x + direction < 8 && otherHalf.x + direction >= 0 && otherHalf.x + direction < 8
-			&& (y == 16 || gameBoard[x + direction, y] == null || gameBoard[x + direction, y] == otherHalf)
-			&& (otherHalf.y == 16 || gameBoard[otherHalf.x + direction, otherHalf.y] == null
-				|| gameBoard[otherHalf.x + direction, otherHalf.y] == this))
+		if (IsAvailable(x + direction, y, otherHalf.x + direction, y))
 		{
-			// make the proper blocks null and add the direction to both halve's x value
-			SetBoardValue(x, y, null);
-			SetBoardValue(otherHalf.x, otherHalf.y, null);
-
-			x += direction;
-			otherHalf.x += direction;
-
-			SetBoardValue(x, y, this);
-			SetBoardValue(otherHalf.x, otherHalf.y, otherHalf);
-
-			// part for pill half is the whole pill so only need to move it once
-			part.transform.position += new Vector3(direction, 0, 0);
+			TryMove(x + direction, y);
 		}
 	}
 	// try rotating the pill
@@ -146,11 +145,7 @@ public class PillHalf : Block
 		   
 		   the left half when horizontal will always be fine since there always is part of the pill in the bottom left
 		   during rotation */
-		if ((angle == 90 || angle == 270)
-			&& (nextX > 7 || nextOtherX > 7 || (nextY < 16 && gameBoard[nextX, nextY] != null && gameBoard[nextX, nextY] != this 
-				&& gameBoard[nextX, nextY] != otherHalf)
-			|| (nextOtherY < 16 && gameBoard[nextOtherX, nextOtherY] != null && gameBoard[nextOtherX, nextOtherY] != this 
-				&& gameBoard[nextOtherX, nextOtherY] != otherHalf)))
+		if ((angle == 90 || angle == 270) && !IsAvailable(nextX, nextY, nextOtherX, nextOtherY))
 		{
 			nextX--;
 			nextOtherX--;
@@ -158,10 +153,7 @@ public class PillHalf : Block
 		}
 		/* only actually rotate the pill if the x values aren't to the left of the board (from pushing off another block)
 		   and the spots its trying to rotate to are either empty or currently contain apart of the pill */
-		if (nextX >= 0 && nextOtherX >= 0
-			&& (nextY == 16 || gameBoard[nextX, nextY] == null || gameBoard[nextX, nextY] == this || gameBoard[nextX, nextY] == otherHalf)
-			&& (nextOtherY == 16 || gameBoard[nextOtherX, nextOtherY] == null || gameBoard[nextOtherX, nextOtherY] == this
-				|| gameBoard[nextOtherX, nextOtherY] == otherHalf))
+		if (IsAvailable(nextX, nextY, nextOtherX, nextOtherY))
 		{
 			// set the values of the current pill spots to null
 			SetBoardValue(x, y, null);
@@ -183,9 +175,51 @@ public class PillHalf : Block
 			part.transform.position += positionOffset;
 		}
 	}
-	// overridden, split the pill if only one half is going to be cleared; otherwise, destroy the entire pill
-	public override void Clear(HashSet<Block> blocksToClear)
+	// returns true if the specified values are within the bounds of the board or one above the board since half the pill is allowed off the board
+	public override bool IsWithinBounds(int x, int y)
 	{
+		return x >= 0 && x < boardSizeX && y >= 0 && y <= boardSizeY;
+	}
+	// checks if the 2 specified positions are available for this pill
+	public bool IsAvailable(int thisX, int thisY, int otherX, int otherY)
+	{
+		// OOB = Out of Bounds
+		Block thisTarget = GetBoardValue(thisX, thisY, out bool thisOOB);
+		Block otherTarget = GetBoardValue(otherX, otherY, out bool otherOOB);
+
+		return !thisOOB && !otherOOB && (thisTarget == null || thisTarget == otherHalf || thisTarget == this) 
+			&& (otherTarget == null || otherTarget == this || otherTarget == otherHalf);
+	}
+	// checks the positions of both halves where it only takes the position of one half and calculates the position of the other
+	protected override bool TryMove(int newX, int newY)
+	{
+		// get the difference between the halves of pills' positions
+		int otherNewX = newX + (otherHalf.x - x);
+		int otherNewY = newY + (otherHalf.y - y);
+
+		// only move the pill half if both spots are available
+		if (IsAvailable(newX, newY, otherNewX, otherNewY))
+		{
+			SetBoardValue(x, y, null);
+			SetBoardValue(otherHalf.x, otherHalf.y, null);
+			
+			otherHalf.x = otherNewX;
+			otherHalf.y = otherNewY;
+			x = newX;
+			y = newY;
+
+			SetBoardValue(x , y, this);
+			SetBoardValue(otherHalf.x, otherHalf.y, otherHalf);
+			part.transform.position = new(x, y, 0);
+
+			return true;
+		}
+		return false;
+	}
+	// overridden, split the pill if only one half is going to be cleared; otherwise, destroy the entire pill
+	public override void Clear(HashSet<Block> blocksToClear, out int garbageCount)
+	{
+		garbageCount = 0;
 		// the other half of the pill may have already cleared, if so skip the rest as the pill should already be destroyed
 		if (part == null)
 			return;
@@ -206,10 +240,10 @@ public class PillHalf : Block
 		}
 	}
 	// overridden from block class, checks the other half of the pill when falling as well
-	public override bool Fall(out bool doNotCheck, out bool removeFromBlocksThatMayFall)
+	public override bool TryToFall(out bool doNotCheck)
 	{
 		doNotCheck = false;
-		removeFromBlocksThatMayFall = false;
+
 		// skip checking since only the left needs to fall to lower the whole pill
 		if (!isLeftHalf)
 			return false;
@@ -218,24 +252,9 @@ public class PillHalf : Block
 		int otherY = otherHalf.y;
 
 		// ensure both instances of y will be within the board and have no blocks underneath that aren't the other half
-		if (y > 0 && (gameBoard[x, y - 1] == null || gameBoard[x, y - 1] == otherHalf)
-			&& otherY > 0 && (gameBoard[otherX, otherY - 1] == null || gameBoard[otherX, otherY - 1] == this))
+		if (TryMove(x, y - 1))
 		{
 			timesRestedOnSomething = 0;
-
-			// lower both halves
-			SetBoardValue(x, y, null);
-			SetBoardValue(otherX, otherY, null);
-
-			y--;
-			otherY--;
-			otherHalf.y = otherY;
-
-			SetBoardValue(x, y, this);
-			SetBoardValue(otherX, otherY, otherHalf);
-
-			// only need to lower the part once since it is the whole pill
-			part.transform.position += Vector3.down;
 
 			return true;
 		}
@@ -253,21 +272,17 @@ public class PillHalf : Block
 		currentPillLeftHalf = null;
 		
 		// if half the pill is resting above the board, split the pill so only the half in the board remains
-		if (y == 16)
+		if (y == boardSizeY)
 		{
 			doNotCheck = true;
 			Split(false);
 		}
-		else if (otherHalf.y == 16)
+		else if (otherHalf.y == boardSizeY)
 		{
 			doNotCheck = true;
 			Split(true);
 		}
-		else
-		{
-			if (y == 0 || otherHalf.y == 0)
-				removeFromBlocksThatMayFall = true;
-		}
+
 		return false;
 	}
 	// overridden, adds the matches of the other half AS WELL
