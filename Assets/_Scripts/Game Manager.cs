@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using TMPro;
 using UnityEngine;
+using UnityEngine.UI;
 
 // uses the block class (Block.cs) and derived classes of it (Virus.cs and PillHalf.cs)
 public class GameManager : MonoBehaviour
@@ -23,7 +24,12 @@ public class GameManager : MonoBehaviour
 
 	public TextMeshProUGUI scoreTMP,
 		virusCountTMP,
+		levelLabelTMP,
 		gameEndTMP;
+
+	public Button backToMenuButton;
+
+	public GameObject gameUICanvas;
 
 	// in seconds, the amount of time between updating falling objects
 	public float gravityInterval;
@@ -31,7 +37,7 @@ public class GameManager : MonoBehaviour
 	// the sped up interval that pills move down at while the down button is held
 	public float downHeldGravityInterval;
 
-	private bool gameEnded = false;
+	private bool gameEnded = true;
 
 	// true when down is held and false otherwise
 	private bool downHeld = false;
@@ -61,7 +67,7 @@ public class GameManager : MonoBehaviour
 			EndGame(false);
 	}
 	// generate the specified amount of viruses randomly through the board
-	private void RandomlyGenerateViruses()
+	private void RandomlyGenerateViruses(int virusCount)
 	{
 		// this list contains all available spots for a virus to generate
 		List<Vector2> possibleVirusSpots = new();
@@ -77,7 +83,7 @@ public class GameManager : MonoBehaviour
 		}
 
 		// loop to place the specified amount of viruses
-		for (int i = 0; i < virusCount; i++)
+		for (int virusesPlaced = 0; virusesPlaced < virusCount; virusesPlaced++)
 		{
 			// randomly select a position in an empty location
 			int positionIndex = Random.Range(0, possibleVirusSpots.Count);
@@ -86,33 +92,13 @@ public class GameManager : MonoBehaviour
 			// randomly select a color for the virus
 			Block.Color color = Block.GetRandomColor(Virus.virusColorList);
 
-			// place the virus
-			Virus.InsertVirus((int)chosenPosition.x, (int)chosenPosition.y, color);
+			// try inserting virus at specified position, is it didn't successfully place decrement counter and try again
+			if (!Virus.InsertVirus((int)chosenPosition.x, (int)chosenPosition.y, color))
+				virusesPlaced--;
 
 			// remove the position from the list of available positions since a virus is now there
 			possibleVirusSpots.RemoveAt(positionIndex);
 		}
-	}
-	// simply generates viruses in a way to easily test certain edge cases with rotating
-	private void GenerateRotateTestLevel()
-	{
-		Virus.InsertVirus(1, 0, Block.Color.Red);
-		Virus.InsertVirus(1, 1, Block.Color.Red);
-		Virus.InsertVirus(1, 2, Block.Color.Red);
-		Virus.InsertVirus(1, 3, Block.Color.Red);
-		Virus.InsertVirus(3, 1, Block.Color.Red);
-		Virus.InsertVirus(3, 3, Block.Color.Red);
-		Virus.InsertVirus(4, 0, Block.Color.Red);
-		Virus.InsertVirus(4, 4, Block.Color.Red);
-		Virus.InsertVirus(5, 1, Block.Color.Red);
-		Virus.InsertVirus(5, 3, Block.Color.Red);
-
-		Virus.InsertVirus(2, 8, Block.Color.Red);
-		Virus.InsertVirus(2, 10, Block.Color.Red);
-		Virus.InsertVirus(3, 8, Block.Color.Red);
-		Virus.InsertVirus(3, 11, Block.Color.Red);
-		Virus.InsertVirus(4, 8, Block.Color.Red);
-		Virus.InsertVirus(4, 10, Block.Color.Red);
 	}
 	// for outside calls, allow moving the current pill from the pill control script
 	public void MoveCurrentPillHorizontally(int direction)
@@ -126,6 +112,7 @@ public class GameManager : MonoBehaviour
 		if (PillHalf.currentPillLeftHalf != null)
 			PillHalf.currentPillLeftHalf.Rotate();
 	}
+	// properly stop the game from running and show proper end UI
 	public void EndGame(bool gameOver)
 	{
 		if (gameOver)
@@ -138,6 +125,37 @@ public class GameManager : MonoBehaviour
 		}
 		gameEndTMP.gameObject.SetActive(true);
 		gameEnded = true;
+		backToMenuButton.gameObject.SetActive(true);
+	}
+	// hide the game UI, reset score, other part of method in Menu.cs
+	public void OnBackToMenuClicked()
+	{
+		gameUICanvas.SetActive(false);
+		Block.score = 0;
+		UpdateScore(Block.score);
+	}
+	// reset all the proper variables to restart the game and display the proper UI elements
+	public void ResetGame(int level)
+	{
+		gameUICanvas.SetActive(true);
+		gameEndTMP.gameObject.SetActive(false);
+		gameEnded = false;
+		levelLabelTMP.text = $"Level: {level}";
+		backToMenuButton.gameObject.SetActive(false);
+		Block.stillFalling = new();
+		blocksToCheck = new();
+		Block.gameBoard = new Block[Block.boardSizeX, Block.boardSizeY];
+		PillHalf.nextPillLeftHalf = null;
+		PillHalf.currentPillLeftHalf = null;
+		Virus.virusesRemaining = 0;
+		
+		// destroy all the block objects, code from https://stackoverflow.com/a/60391826
+		while (blockFolder.transform.childCount > 0) {
+   			DestroyImmediate(blockFolder.transform.GetChild(0).gameObject);
+		}
+
+		// virus amount generated based on the level
+		RandomlyGenerateViruses(4 + (4 * level));
 	}
 	// called by pill control, set to true when down is held
 	public void DownHeld()
@@ -149,7 +167,7 @@ public class GameManager : MonoBehaviour
 	{
 		// randomly generate a seed for the rng so bugs can be replicated easier by setting the seed manually
 		int seed = Random.Range(1, 100000);
-		seed = 28028;
+		//seed = 73170;
 		Debug.Log($"The seed is: {seed}");
 
 		Random.InitState(seed);
@@ -160,8 +178,6 @@ public class GameManager : MonoBehaviour
 		Virus.virusPrefab = virusPrefab;
 		PillHalf.pillPrefab = this.pillPrefab;
 		blocksToCheck = new();
-		RandomlyGenerateViruses();
-		//GenerateRotateTestLevel();
 	}
 	// Update is called once per frame
 	void Update()
@@ -198,9 +214,6 @@ public class GameManager : MonoBehaviour
 					// clear the blocks that need to be cleared
 					if (blocksToClear.Count > 0)
 					{
-						// ensure the first virus cleared per turn gives the minimum amount of points
-						Virus.ResetBonusPointGain();
-
 						foreach (Block block in blocksToClear)
 						{
 							block.Clear(blocksToClear, out int garbageCount);
@@ -228,6 +241,9 @@ public class GameManager : MonoBehaviour
 					// spawn a pill one interval after checking
 					PillHalf.SpawnNewPill();
 					tryMakingBlocksFallAgain = false;
+
+					// ensure the first virus cleared per turn gives the minimum amount of points
+					Virus.ResetBonusPointGain();
 				}
 			}
 			else

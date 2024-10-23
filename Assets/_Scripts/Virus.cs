@@ -12,7 +12,7 @@ public class Virus : Block
 	public static GameObject virusPrefab;
 
 	// the amount of viruses left to destroy
-	private static int virusesRemaining = 0;
+	public static int virusesRemaining = 0;
 
 	// the amount of points gained per virus clear, increases as more viruses are cleared in a single clear
 	private static int currentPointGain = 100;
@@ -21,10 +21,14 @@ public class Virus : Block
 	public static readonly List<Color> virusColorList = new() {
 		Color.Red,
 		Color.Red,
+		Color.Red,
+		Color.Yellow,
 		Color.Yellow,
 		Color.Yellow,
 		Color.Blue,
 		Color.Blue,
+		Color.Blue,
+		Color.Grey,
 		Color.Grey
 	};
 	// reset the point gain for the next turn
@@ -37,7 +41,7 @@ public class Virus : Block
 	{
 		SetColor(color);
 	}
-	// update score and virus count appropriately
+	// update score and virus count appropriately, blocksToClear will only be null if the virus failed to initially generate
 	public override void Clear(HashSet<Block> blocksToClear, out int garbageCount)
 	{
 		garbageCount = 0;
@@ -46,15 +50,19 @@ public class Virus : Block
 		virusesRemaining--;
 		gameManager.UpdateVirusCount(virusesRemaining);
 
-		score += currentPointGain;
-		gameManager.UpdateScore(score);
+		// only update score and possibly spawn garbage if the virus was cleared after the viruses generated
+		if (blocksToClear != null)
+		{
+			score += currentPointGain;
+			gameManager.UpdateScore(score);
 
-		// for every virus cleared in one turn, the score gained per virus doubles
-		currentPointGain *= 2;
+			// for every virus cleared in one turn, the score gained per virus doubles
+			currentPointGain *= 2;
 
-		// spawn 1-3 garbage blocks for custom mechanic
-		if (color == Color.Grey)
-			garbageCount = Random.Range(1, 4);
+			// spawn 1-3 garbage blocks for custom mechanic
+			if (color == Color.Grey)
+				garbageCount = Random.Range(1, 4);
+		}
 	}
 	// do nothing since viruses cannot fall
 	public override bool TryToFall(out bool doNotCheck)
@@ -63,8 +71,10 @@ public class Virus : Block
 		return false;
 	}
 
-	// insert a virus at the specified position and possibly the specified color, use this instead of a constructor
-	public static void InsertVirus(int x, int y, Color color)
+	/* insert a virus at the specified position and possibly the specified color, use this instead of a constructor
+	 * if this virus creates a match that is 3 or greater, it will change colors until it no longer does 
+	 * if every color creates a match that is 3 or greater, it will return false; otherwise, return true*/
+	public static bool InsertVirus(int x, int y, Color color)
 	{
 		GameObject virusObject = Object.Instantiate(virusPrefab, blockFolder.transform);
 
@@ -76,7 +86,7 @@ public class Virus : Block
 
 		List<Color> possibleColors = new(virusColorList);
 
-		// remove all occurrences of the chosen color from the list
+		// remove all occurrences of the chosen color from the list, code from: https://www.techiedelight.com/remove-all-occurrences-of-an-item-from-a-list-in-csharp/
 		possibleColors.RemoveAll(item => item == color);
 
 		// if more than 2 blocks (viruses only at the start) are in a row, change the color to avoid generation that is too easy
@@ -90,6 +100,16 @@ public class Virus : Block
 			// check the matching parts again as it is technically possible for multiple colors to match at this position
 			virus.SameColorInARow(out horizontalMatches, out verticalMatches);
 		}
+		// check to see if it tried every color and that every color creates a match that is too big 
+		if (possibleColors.Count == 0 && (horizontalMatches.Count > 2 || verticalMatches.Count > 2))
+		{
+			// destroy this virus since it would create a match that is too large
+			SetBoardValue(x, y, null);
+			virus.Clear(null, out int _);
+			return false;
+		}
+
+		return true;
 	}
 	// this constructor ensures the mesh renderer is properly set and updates the virus count, private since InsertVirus is used instead
 	private Virus(GameObject part, Color color, int x, int y) : base(part, color, x, y)
