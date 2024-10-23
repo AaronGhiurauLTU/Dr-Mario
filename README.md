@@ -59,7 +59,7 @@ Blender tutorial: https://youtube.com/playlist?list=PLjEaoINr3zgEPv5y--4MKpciLao
 
 7. **What trouble did you have with this project?**
 
-- Managing all parts that need to fall and clearing blocks at the proper time
+- Managing all parts that need to fall and clearing blocks at the proper time, pills were particularly difficult to manage due to the part being shared by 2 instances
 - Ensuring virus generation doesn't generate matches greater than 2 long particularly in higher levels with the addition of grey viruses
 
 <br>

@@ -18,6 +18,9 @@ public class PillHalf : Block
 	// the next pill queued to be given to the player
 	public static PillHalf nextPillLeftHalf = null;
 
+	// used to ensure each pill falls only once per interval as a single call to one of the halves makes the whole pill fall
+	public bool fallen;
+
 	// current rotation of pill (0, 90, 180, or 270 degrees) and not necessarily the same as the transform but exists for ease of reading
 	private int angle;
 
@@ -46,7 +49,6 @@ public class PillHalf : Block
 		rightHalf.otherHalf = leftHalf;
 
 		nextPillLeftHalf = leftHalf;
-
 		
 		if (currentPillLeftHalf == null)
 		{
@@ -113,9 +115,9 @@ public class PillHalf : Block
 		int nextOtherY = otherHalf.y;
 
 		/* to mimic the original game, the pill rotates within a 2x2 area throughout a full 360 degree rotation
-		   so there is some adjustments to the positions to keep it consistent 
-		   essentially it rotates clockwise but when going vertical to horizontal, the top will always be 
-		   on the right of the pill */
+		 * so there is some adjustments to the positions to keep it consistent 
+		 * essentially it rotates clockwise but when going vertical to horizontal, the top will always be 
+		 * on the right of the pill */
 		switch (nextAngle)
 		{
 			case 0:
@@ -139,12 +141,12 @@ public class PillHalf : Block
 				break;
 		}
 		/* only if the pill is currently vertical and trying to become horizontal, if the right side is out of the board or
-		   inside another block, it will "push off" the wall, shift the whole pill to the left like the original game
-
-		   essentially this if statement checks if the space its trying to rotate into is not empty and not currently the pill 
-		   
-		   the left half when horizontal will always be fine since there always is part of the pill in the bottom left
-		   during rotation */
+		 * inside another block, it will "push off" the wall, shift the whole pill to the left like the original game
+		 *
+		 * essentially this if statement checks if the space its trying to rotate into is not empty and not currently the pill 
+		 * 
+		 * the left half when horizontal will always be fine since there always is part of the pill in the bottom left
+		 * during rotation */
 		if ((angle == 90 || angle == 270) && !IsAvailable(nextX, nextY, nextOtherX, nextOtherY))
 		{
 			nextX--;
@@ -152,7 +154,7 @@ public class PillHalf : Block
 			positionOffset += Vector3.left;
 		}
 		/* only actually rotate the pill if the x values aren't to the left of the board (from pushing off another block)
-		   and the spots its trying to rotate to are either empty or currently contain apart of the pill */
+		 * and the spots its trying to rotate to are either empty or currently contain apart of the pill */
 		if (IsAvailable(nextX, nextY, nextOtherX, nextOtherY))
 		{
 			// set the values of the current pill spots to null
@@ -210,7 +212,12 @@ public class PillHalf : Block
 
 			SetBoardValue(x , y, this);
 			SetBoardValue(otherHalf.x, otherHalf.y, otherHalf);
-			part.transform.position = new(x, y, 0);
+			
+			// position of part is based on left half's position
+			if (isLeftHalf)
+				part.transform.position = new(x, y, 0);
+			else
+				part.transform.position = new(otherHalf.x, otherHalf.y, 0);
 
 			return true;
 		}
@@ -243,13 +250,22 @@ public class PillHalf : Block
 	public override bool TryToFall(out bool doNotCheck)
 	{
 		doNotCheck = false;
-
-		// skip checking since only the left needs to fall to lower the whole pill
-		if (!isLeftHalf)
-			return false;
-
-		int otherX = otherHalf.x;
-		int otherY = otherHalf.y;
+		
+		// ensure each pill falls only once as the TryToMove method handles both halves, only matters if it isn't part of the current pill
+		if (this != currentPillLeftHalf && otherHalf != currentPillLeftHalf)
+		{
+			if (!fallen)
+			{
+				fallen = true;
+				otherHalf.fallen = true;
+			}
+			else
+			{
+				fallen = false;
+				otherHalf.fallen = false;
+				return false;
+			}
+		}
 
 		// ensure both instances of y will be within the board and have no blocks underneath that aren't the other half
 		if (TryMove(x, y - 1))
@@ -317,6 +333,7 @@ public class PillHalf : Block
 		SetColor(color);
 
 		timesRestedOnSomething = 0;
+		fallen = false;
 
 		// all start with an angle of 0
 		angle = 0;

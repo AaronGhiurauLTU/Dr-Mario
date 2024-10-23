@@ -5,8 +5,8 @@ using Unity.Properties;
 using UnityEngine;
 
 /* derived from the block, visually has an angry face and generates at the start of the game
-   the only main difference from block is that it gives points when cleared, can change color during initial generation, 
-   and decrements the remaining virus counter when destroyed */
+ * the only main difference from block is that it gives points when cleared, can change color during initial generation, 
+ * and decrements the remaining virus counter when destroyed */
 public class Virus : Block
 {
 	public static GameObject virusPrefab;

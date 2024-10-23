@@ -66,9 +66,14 @@ public class GameManager : MonoBehaviour
 		if (virusCount == 0)
 			EndGame(false);
 	}
-	// generate the specified amount of viruses randomly through the board
-	private void RandomlyGenerateViruses(int virusCount)
+	// generate the amount of viruses based on the specified level
+	private void RandomlyGenerateViruses(int level)
 	{
+		int virusCount = 4 + (4 * level);
+
+		// it is always at least 10 but increases up to 13 at higher levels
+		int maxHeight = Mathf.Max(10, 3 + ((level + 1) / 2));
+
 		// this list contains all available spots for a virus to generate
 		List<Vector2> possibleVirusSpots = new();
 
@@ -76,7 +81,7 @@ public class GameManager : MonoBehaviour
 		for (int x = 0; x < 8; x++)
 		{
 			// viruses only generate up to the 13th level for fair game-play
-			for (int y = 0; y < 13; y++)
+			for (int y = 0; y < maxHeight; y++)
 			{
 				possibleVirusSpots.Add(new(x, y));
 			}
@@ -155,7 +160,7 @@ public class GameManager : MonoBehaviour
 		}
 
 		// virus amount generated based on the level
-		RandomlyGenerateViruses(4 + (4 * level));
+		RandomlyGenerateViruses(level);
 	}
 	// called by pill control, set to true when down is held
 	public void DownHeld()
@@ -271,11 +276,11 @@ public class GameManager : MonoBehaviour
 				}
 				else
 				{
-					// iterate through every spot in the board and call the fall function of each block that exists
-					for (int x = 0; x < Block.boardSizeX; x++)
+					/* iterate through every spot in the board and call the fall function of each block that exists
+					 * it is important to start from the bottom and move upwards so the blocks above don't fall and "land" onto a falling block below */
+					for (int y = 0; y < Block.boardSizeY; y++)
 					{
-						// it is important to start from the bottom and move upwards so the blocks above don't fall and "land" onto a falling block below
-						for (int y = 0; y < Block.boardSizeY; y++)
+						for (int x = 0; x < Block.boardSizeX; x++)
 						{
 							Block block = Block.gameBoard[x, y];
 

@@ -73,7 +73,7 @@ public class Block
 		Color selectedColor = GetRandomColor(colorList);
 
 		/* remove every instance as the virus list has duplicated to have weights for certain colors
-		   code from https://www.techiedelight.com/remove-all-occurrences-of-an-item-from-a-list-in-csharp/ */
+		 * code from https://www.techiedelight.com/remove-all-occurrences-of-an-item-from-a-list-in-csharp/ */
 		colorList.RemoveAll(item => item == selectedColor);
 
 		return selectedColor;
@@ -132,7 +132,7 @@ public class Block
 		return x >= 0 && x < boardSizeX && y >= 0 && y < boardSizeY;
 	}
 	/* get the horizontal and vertical set of matches and forward them to the clear blocks method to determine which ones are large enough
-	   this method gets overridden in the pill half, returns all matches that were large enough to be cleared */
+	 * this method gets overridden in the pill half, returns all matches that were large enough to be cleared */
 	public virtual HashSet<Block> CheckMatchesToClear()
 	{
 		SameColorInARow(out HashSet<Block> horizontalMatches, out HashSet<Block> verticalMatches);
@@ -369,7 +369,7 @@ public class Block
 		this.color = color;
 	}
 	/* overridable, falls until it reaches the bottom or a block is directly below it and returns true if it fell
-	   the out variable is false in most cases, but is true when the block should not be checked for matches (pills splitting) */
+	 * the out variable is false in most cases, but is true when the block should not be checked for matches (pills splitting) */
 	public virtual bool TryToFall(out bool doNotCheck)
 	{
 		doNotCheck = false;
