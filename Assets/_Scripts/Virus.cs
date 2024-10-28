@@ -6,7 +6,9 @@ using UnityEngine;
 
 /* derived from the block, visually has an angry face and generates at the start of the game
  * the only main difference from block is that it gives points when cleared, can change color during initial generation, 
- * and decrements the remaining virus counter when destroyed */
+ * and decrements the remaining virus counter when destroyed 
+ *
+ * ChatGPT was used to get more information about virtual methods and overriding them as well as debugging errors related to accessing variables outside of the class */
 public class Virus : Block
 {
 	public static GameObject virusPrefab;

@@ -14,43 +14,69 @@ public class GameManager : MonoBehaviour
 		blue,
 		grey;
 	
-	// the amount of viruses that initially generate
-	public int virusCount;
-	
 	public GameObject blockPrefab,
 		virusPrefab,
 		pillPrefab,
-		blockFolder;
+		blockFolder,
+		borderPrefab,
+		virusBurstPrefab;
 
 	public TextMeshProUGUI scoreTMP,
 		virusCountTMP,
 		levelLabelTMP,
+		speedLevelTMP,
 		gameEndTMP;
 
 	public Button backToMenuButton;
 
 	public GameObject gameUICanvas;
 
-	// in seconds, the amount of time between updating falling objects
-	public float gravityInterval;
+	public float lowInterval = 40/60;
+	// 36
+	// 32
+	// 28
+	// 24
+	public float medInterval = 19/60;
+	public float hiInterval = 14/60;
 
 	// the sped up interval that pills move down at while the down button is held
 	public float downHeldGravityInterval;
 
+	public float clearAnimationInterval = .1f;
+
+	public int clearAnimationIntervalCount = 5;
+
+	// while true, nothing in the game should update
 	private bool gameEnded = true;
+
+	// in seconds, the amount of time between updating falling objects
+	private float gravityInterval;
 
 	// true when down is held and false otherwise
 	private bool downHeld = false;
 
 	// the time since the last time blocks were shifted down one
-	private float timeElapsedSinceUpdate = 0.0f;
+	private float timeElapsedSinceUpdate = 0.0f,
+
+	// the time since the last clear animation update
+		timeElapsedSinceClearAnimationUpdate = 0.0f;
+
+	// the amount of times the current clear animation has been updated
+	private int animationUpdatesCount = 0;
+
+	// the amount of viruses that are currently on the board
+	private int virusCount;
 
 	// the blocks that need to be checked for new matches after all blocks stop falling
 	private HashSet<Block> blocksToCheck;
 
+	// the key is the actual object that will be animated and the value is a bool that is true if the part was a virus
+	private Dictionary<GameObject, bool> blocksToAnimateClearing;
+
 	// true after blocks were cleared to check if anything needs to fall
 	private bool tryMakingBlocksFallAgain = false;
 
+	// each value in the queue represents how many garbage drops will be dropped at once
 	private readonly Queue<int> queuedGarbage = new();
 
 	// update the UI to scow the new score
@@ -63,12 +89,12 @@ public class GameManager : MonoBehaviour
 	{
 		virusCountTMP.text = $"Viruses: {virusCount}";
 
-		if (virusCount == 0)
-			EndGame(false);
+		this.virusCount = virusCount;
 	}
 	// generate the amount of viruses based on the specified level
 	private void RandomlyGenerateViruses(int level)
 	{
+		// add 4 viruses per level
 		int virusCount = 4 + (4 * level);
 
 		// it is always at least 10 but increases up to 13 at higher levels
@@ -140,15 +166,41 @@ public class GameManager : MonoBehaviour
 		UpdateScore(Block.score);
 	}
 	// reset all the proper variables to restart the game and display the proper UI elements
-	public void ResetGame(int level)
+	public void ResetGame(int level, string speed)
 	{
+		// set the appropriate speed of gravity
+		switch (speed)
+		{
+			case "LOW":
+				gravityInterval = lowInterval;
+				break;
+			case "MED":
+				gravityInterval = medInterval;
+				break;
+			case "HI":
+				gravityInterval = hiInterval;
+				break;
+		}
+		levelLabelTMP.text = $"Speed: {speed}";
+
 		gameUICanvas.SetActive(true);
 		gameEndTMP.gameObject.SetActive(false);
+
 		gameEnded = false;
+		
 		levelLabelTMP.text = $"Level: {level}";
 		backToMenuButton.gameObject.SetActive(false);
+		
 		Block.stillFalling = new();
+		
 		blocksToCheck = new();
+		blocksToAnimateClearing = new();
+
+		timeElapsedSinceClearAnimationUpdate = 0;
+		animationUpdatesCount = 0;
+
+		timeElapsedSinceUpdate = 0;
+
 		Block.gameBoard = new Block[Block.boardSizeX, Block.boardSizeY];
 		PillHalf.nextPillLeftHalf = null;
 		PillHalf.currentPillLeftHalf = null;
@@ -183,12 +235,60 @@ public class GameManager : MonoBehaviour
 		Virus.virusPrefab = virusPrefab;
 		PillHalf.pillPrefab = this.pillPrefab;
 		blocksToCheck = new();
+		blocksToAnimateClearing = new();
 	}
 	// Update is called once per frame
 	void Update()
 	{
+		// don't update anything while the game is ended
 		if (gameEnded)
 			return;
+
+		// animate cleared parts
+		if (blocksToAnimateClearing.Count > 0)
+		{
+			timeElapsedSinceClearAnimationUpdate += Time.deltaTime;
+
+			// update animation if enough time has passed
+			if (timeElapsedSinceClearAnimationUpdate >= clearAnimationInterval)
+			{
+				timeElapsedSinceClearAnimationUpdate = 0;
+				animationUpdatesCount++;
+
+				// toggle the white border of each part to make the blocks look like they're flashing
+				foreach (KeyValuePair<GameObject, bool> partIsVirusPair in blocksToAnimateClearing)
+				{
+					partIsVirusPair.Key.GetComponent<MeshRenderer>().enabled = !partIsVirusPair.Key.GetComponent<MeshRenderer>().enabled;
+				}
+				// stop animating if it updated enough times
+				if (animationUpdatesCount >= clearAnimationIntervalCount)
+				{
+					foreach (KeyValuePair<GameObject, bool> partIsVirusPair in blocksToAnimateClearing)
+					{
+						// create a particle burst where viruses were cleared with the same color as the virus
+						if (partIsVirusPair.Value)
+						{
+							GameObject virusBurstParticles = Instantiate(virusBurstPrefab);
+							ParticleSystem.MainModule main = virusBurstParticles.GetComponent<ParticleSystem>().main;
+							main.startColor =  partIsVirusPair.Key.transform.GetChild(0).GetComponent<MeshRenderer>().material.color;
+							virusBurstParticles.transform.position = partIsVirusPair.Key.transform.position;
+						}
+
+						// destroy the part
+						Destroy(partIsVirusPair.Key);
+					}
+
+					animationUpdatesCount = 0;
+					blocksToAnimateClearing = new();
+
+					// end the game since all viruses were cleared
+					if (virusCount == 0)
+						EndGame(false);
+				}
+			}
+			// do not update anything else while animating these blocks getting cleared
+			return;
+		}
 
 		timeElapsedSinceUpdate += Time.deltaTime;
 
@@ -205,7 +305,7 @@ public class GameManager : MonoBehaviour
 			if (Block.stillFalling.Count == 0 && !tryMakingBlocksFallAgain)
 			{
 				/* if there are blocks to check, check them now after everything finished falling
-				   this is so smaller matches aren't cleared before everything falls */
+				 * this is so smaller matches aren't cleared before everything falls */
 				if (blocksToCheck.Count > 0)
 				{
 					// the blocks that will be cleared due to being in matches >= 4
@@ -221,10 +321,21 @@ public class GameManager : MonoBehaviour
 					{
 						foreach (Block block in blocksToClear)
 						{
+							// create the part that will be animated to show what is cleared in the place of the original 
+							GameObject animationPart = Instantiate(borderPrefab);
+							animationPart.transform.position = new(block.x, block.y, 0);
+
+							// set the color of the inner part to the same color of the block being cleared
+							animationPart.transform.GetChild(0).GetComponent<MeshRenderer>().material = Block.GetMaterial(block.GetColor);
+
 							block.Clear(blocksToClear, out int garbageCount);
 
 							if (garbageCount > 0)
 								queuedGarbage.Enqueue(garbageCount);
+
+							/* the key is the game object and the value is a bool that is true if the part is a virus
+							 * help for comparing type from: https://stackoverflow.com/a/708240 */
+							blocksToAnimateClearing.Add(animationPart, block is Virus);
 						}
 						// check for blocks that may need to fall after clearing these blocks
 						tryMakingBlocksFallAgain = true;
@@ -247,6 +358,9 @@ public class GameManager : MonoBehaviour
 					PillHalf.SpawnNewPill();
 					tryMakingBlocksFallAgain = false;
 
+					// allow one extra interval of time for when the pill first spawns in to react and move left/right
+					timeElapsedSinceUpdate -= currentGravityInterval;
+
 					// ensure the first virus cleared per turn gives the minimum amount of points
 					Virus.ResetBonusPointGain();
 				}
@@ -266,8 +380,8 @@ public class GameManager : MonoBehaviour
 					else if (Block.stillFalling.Contains(currentPillLeftHalf))
 					{
 						/* if the pill stopped falling, remove it from the list and add it to the checking list if it needs to be checked
-						   it does not need to be checked if it is places halfway above the game board as the pill gets destroyed and
-						   replaced with a normal block */
+						 * it does not need to be checked if it is places halfway above the game board as the pill gets destroyed and
+						 * replaced with a normal block */
 						Block.stillFalling.Remove(currentPillLeftHalf);
 
 						if (!doNotCheck)

@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using UnityEngine;
 
 
-// class for half a pill, contains overridden fall method for checking both halves at once and has a variable for the other half's instance
+/* class for half a pill, contains overridden fall method for checking both halves at once and has a variable for the other half's instance
+ * 
+ * ChatGPT was used to get more information about virtual methods and overriding them as well as debugging errors related to accessing variables outside of the class */
 public class PillHalf : Block
 {
 	// the instance of the other half of the pill

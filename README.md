@@ -18,8 +18,9 @@ Aaron Ghiurau
 
 1. **What are the controls to your game? How do we play?**
 
-Left/Right arrow keys moves currently controlling pill left/right
-Down arrow key makes current pill fall faster
+- Mouse to navigate the menus
+- Left/Right arrow keys moves currently controlling pill left/right
+- Down arrow key makes current pill fall faster
 
 <br>
 
@@ -32,7 +33,8 @@ I added grey viruses which generate on average half as often as the other 3 colo
 
 3. **Any assets used that you didn't create yourself?** <br> (art, music, etc. Just tell us where you got it, link it here)
 
-
+No, all custom models were made by me in Blender for the block, pills, and the inverted block used in animating clears
+GIMP was used to draw the virus faces
 
 <br>
 
@@ -44,16 +46,21 @@ No
 
 5. **Did you get help from any AI Code Assistants?** <br> (Tell us which .cs file to look in for the citation and describe what you learned)
 
+Yes, I used ChatGPT to learn about HashSets and general organization of the classes such as virtual methods and ensuring each class has proper access 
+to the necessary variables. This was used for Block.cs, Virus.cs, and PillHalf.cs
 
 
 <br>
 
 6. **Did you get help from any online websites, videos, or tutorials?** <br> (link them here)
 
-Deleting all children of game object: https://stackoverflow.com/a/60391826
-Removing all instances of a value from a list: https://www.techiedelight.com/remove-all-occurrences-of-an-item-from-a-list-in-csharp/
-Sorting lists by object property: https://stackoverflow.com/a/3309230
-Blender tutorial: https://youtube.com/playlist?list=PLjEaoINr3zgEPv5y--4MKpciLaoQYZB1Z&si=672DmFu1u8EzlDHq
+- C# Tutorial I took over the summer: https://www.freecodecamp.org/learn/foundational-c-sharp-with-microsoft/
+- Unity Scripting Manual: https://docs.unity3d.com/ScriptReference/
+- Deleting all children of game object: https://stackoverflow.com/a/60391826
+- Removing all instances of a value from a list: https://www.techiedelight.com/remove-all-occurrences-of-an-item-from-a-list-in-csharp/
+- Sorting lists by object property: https://stackoverflow.com/a/3309230
+- Comparing types https://stackoverflow.com/a/708240
+- Blender tutorial: https://youtube.com/playlist?list=PLjEaoINr3zgEPv5y--4MKpciLaoQYZB1Z&si=672DmFu1u8EzlDHq
 
 <br>
 
@@ -66,6 +73,7 @@ Blender tutorial: https://youtube.com/playlist?list=PLjEaoINr3zgEPv5y--4MKpciLao
 
 8. **Is there anything else we should know?**
 
+I will probably update this repository past the due date to add future stretch goals such as gravity speeding up over time, storing high scores, unlocking levels past 20, and local co-op
 
 
 

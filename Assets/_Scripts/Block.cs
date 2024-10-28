@@ -3,7 +3,9 @@ using System.Linq;
 using Unity.VisualScripting;
 using UnityEngine;
 
-// stores information about the position and color while providing methods to check for matching adjacent blocks
+/* stores information about the position and color while providing methods to check for matching adjacent blocks
+ *
+ * ChatGPT was used to get more information about virtual methods and overriding them as well as debugging errors related to accessing variables outside of the class */
 public class Block
 {
 	public static readonly int boardSizeX = 8;
@@ -343,6 +345,20 @@ public class Block
 
 		matches = new(orderedBlocks);
 	}
+	public static Material GetMaterial(Color color)
+	{
+		switch (color)
+		{
+			case Color.Red:
+				return gameManager.red;
+			case Color.Yellow:
+				return gameManager.yellow;
+			case Color.Blue:
+				return gameManager.blue;
+			default:
+				return gameManager.grey;
+		}
+	}
 	// sets the color of the mesh renderer if it exists
 	protected void SetColor(Color color)
 	{
@@ -350,21 +366,7 @@ public class Block
 		if (meshRenderer == null)
 			return;
 
-		switch (color)
-		{
-			case Color.Red:
-				meshRenderer.material = gameManager.red;
-				break;
-			case Color.Yellow:
-				meshRenderer.material = gameManager.yellow;
-				break;
-			case Color.Blue:
-				meshRenderer.material = gameManager.blue;
-				break;
-			case Color.Grey:
-				meshRenderer.material = gameManager.grey;
-				break;
-		}
+		meshRenderer.material = GetMaterial(color);
 
 		this.color = color;
 	}
