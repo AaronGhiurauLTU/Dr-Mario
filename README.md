@@ -12,7 +12,7 @@
 # Required ReadMe Info for ALL MCS1243 Projects
 Dr. Mario Midterm
 Aaron Ghiurau
-10/31/24 
+10/30/24 
 
 <br>
 
@@ -21,6 +21,7 @@ Aaron Ghiurau
 - Mouse to navigate the menus
 - Left/Right arrow keys moves currently controlling pill left/right
 - Down arrow key makes current pill fall faster
+- Up arrow to rotate the pill clockwise
 
 <br>
 
@@ -33,8 +34,7 @@ I added grey viruses which generate on average half as often as the other 3 colo
 
 3. **Any assets used that you didn't create yourself?** <br> (art, music, etc. Just tell us where you got it, link it here)
 
-No, all custom models were made by me in Blender for the block, pills, and the inverted block used in animating clears
-GIMP was used to draw the virus faces
+No, all custom models were made by me in Blender for the block, pills, and the inverted block used in animating clears. GIMP was used to draw the virus faces and create the pill bottle background
 
 <br>
 
@@ -46,9 +46,9 @@ No
 
 5. **Did you get help from any AI Code Assistants?** <br> (Tell us which .cs file to look in for the citation and describe what you learned)
 
-Yes, I used ChatGPT to learn about HashSets and general organization of the classes such as virtual methods and ensuring each class has proper access 
-to the necessary variables. This was used for Block.cs, Virus.cs, and PillHalf.cs
+Yes, I used ChatGPT to learn about HashSets and general organization of the classes such as virtual methods and ensuring each class has proper access to the necessary variables. This was used for Block.cs, Virus.cs, and PillHalf.cs
 
+ChatGPT also helped me figure out an issue with the UI slider not recognizing clicks due to having multiple canvases with improper sort orders.
 
 <br>
 
@@ -73,7 +73,10 @@ to the necessary variables. This was used for Block.cs, Virus.cs, and PillHalf.c
 
 8. **Is there anything else we should know?**
 
-I will probably update this repository past the due date to add future stretch goals such as gravity speeding up over time, storing high scores, unlocking levels past 20, and local co-op
+I will probably update this repository past the due date to add future stretch goals such as gravity speeding up over time, storing high scores, 
+unlocking levels past 20, and local co-op. I also want to add another button for rotating counter-clockwise.
+
+There may be a bug where a pill takes far too long to stop falling under extremely rare circumstances but it was not able to be replicated yet.
 
 
 

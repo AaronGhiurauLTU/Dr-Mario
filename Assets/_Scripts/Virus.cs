@@ -34,9 +34,10 @@ public class Virus : Block
 		Color.Grey
 	};
 	// reset the point gain for the next turn
-	public static void ResetBonusPointGain()
+	public static void ResetBonusPointGain(int speedLevel)
 	{
-		currentPointGain = 100;
+		// more points are given at higher speeds
+		currentPointGain = 100 * speedLevel; 
 	}
 	// allow changing the color during generation to avoid more than 2 matching viruses in a row
 	public void ChangeColor(Color color)

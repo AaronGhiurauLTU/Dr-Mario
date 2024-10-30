@@ -67,6 +67,9 @@ public class GameManager : MonoBehaviour
 	// the amount of viruses that are currently on the board
 	private int virusCount;
 
+	// 1 for low, 2 for med, 3 for high, is a score multiplier for clearing viruses
+	private int speedLevel = 2;
+
 	// the blocks that need to be checked for new matches after all blocks stop falling
 	private HashSet<Block> blocksToCheck;
 
@@ -173,18 +176,22 @@ public class GameManager : MonoBehaviour
 		{
 			case "LOW":
 				gravityInterval = lowInterval;
+				speedLevel = 1;
 				break;
 			case "MED":
 				gravityInterval = medInterval;
+				speedLevel = 2;
 				break;
 			case "HI":
 				gravityInterval = hiInterval;
+				speedLevel = 3;
 				break;
 		}
-		levelLabelTMP.text = $"Speed: {speed}";
 
 		gameUICanvas.SetActive(true);
 		gameEndTMP.gameObject.SetActive(false);
+
+		speedLevelTMP.text = $"Speed: {speed}";
 
 		gameEnded = false;
 		
@@ -224,7 +231,9 @@ public class GameManager : MonoBehaviour
 	{
 		// randomly generate a seed for the rng so bugs can be replicated easier by setting the seed manually
 		int seed = Random.Range(1, 100000);
-		//seed = 73170;
+
+		// seed 5106 has a possible bug at level 6
+		//seed = 5106;
 		Debug.Log($"The seed is: {seed}");
 
 		Random.InitState(seed);
@@ -358,11 +367,8 @@ public class GameManager : MonoBehaviour
 					PillHalf.SpawnNewPill();
 					tryMakingBlocksFallAgain = false;
 
-					// allow one extra interval of time for when the pill first spawns in to react and move left/right
-					timeElapsedSinceUpdate -= currentGravityInterval;
-
 					// ensure the first virus cleared per turn gives the minimum amount of points
-					Virus.ResetBonusPointGain();
+					Virus.ResetBonusPointGain(speedLevel);
 				}
 			}
 			else
